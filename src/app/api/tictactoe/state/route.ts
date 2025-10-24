@@ -1,3 +1,5 @@
+export const revalidate = 0;
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { getRedis } from "~/server/redis";
 
@@ -51,7 +53,7 @@ export async function GET(req: Request) {
     };
 
     const userRole = userId === px ? 'X' : userId === po ? 'O' : null;
-    return NextResponse.json({ ok: true, state, userRole });
+    return NextResponse.json({ ok: true, state, userRole }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('/api/tictactoe/state error', err);
     return NextResponse.json({ error: 'server-error' }, { status: 500 });
