@@ -218,6 +218,13 @@ export default function GameClient() {
     setShowJoin(false);
   }, [roomCode]);
 
+  // Auto-close invite modal when both players are present
+  useEffect(() => {
+    if (!showInvite) return;
+    const hasBoth = !!state.players?.X && !!state.players?.O;
+    if (hasBoth) setShowInvite(false);
+  }, [showInvite, state.players?.X, state.players?.O]);
+
   const startNewRoom = () => {
     const code = nanoid(6).toUpperCase();
     setRoomCode(code);
