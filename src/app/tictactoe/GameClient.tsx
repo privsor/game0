@@ -102,7 +102,7 @@ export default function GameClient() {
     (async () => {
       // Fetch current state and role from server
       try {
-        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`);
+        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data.ok) {
@@ -225,6 +225,38 @@ export default function GameClient() {
     if (hasBoth) setShowInvite(false);
   }, [showInvite, state.players?.X, state.players?.O]);
 
+  // While invite modal is open, poll server state as a fallback (in case realtime publish is delayed in production)
+  useEffect(() => {
+    if (!showInvite || !roomCode || !userId) return;
+    let timer: any = null;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok) {
+            setState({
+              board: data.state.board,
+              next: data.state.next,
+              winner: data.state.winner ?? null,
+              players: data.state.players ?? { X: null, O: null },
+              names: data.state.names ?? { X: null, O: null },
+            });
+            if (data.state.players?.X && data.state.players?.O) {
+              setShowInvite(false);
+            }
+          }
+        }
+      } catch {}
+    };
+    // initial tick and interval
+    tick();
+    timer = setInterval(tick, 2000);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showInvite, roomCode, userId]);
+
   const startNewRoom = () => {
     const code = nanoid(6).toUpperCase();
     setRoomCode(code);
@@ -265,7 +297,7 @@ export default function GameClient() {
       } else {
         // On rejection, reconcile with authoritative state (use roomCode, not channelName)
         try {
-          const s = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`);
+          const s = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`, { cache: 'no-store' });
           if (s.ok) {
             const d = await s.json();
             if (d.ok) {

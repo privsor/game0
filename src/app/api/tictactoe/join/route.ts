@@ -104,11 +104,11 @@ export async function POST(req: Request) {
     } as const;
 
     // Publish state so UIs show names/roles immediately
-    // Fire-and-forget to reduce perceived latency of the join request
+    // On serverless platforms (e.g., Vercel) background work may be cancelled after returning.
+    // Await the publish to guarantee delivery before the function ends.
     try {
       const rest = new Ably.Rest(env.ABLY_API_KEY);
-      // Intentionally not awaiting this promise
-      void rest.channels.get(`room-${room}`).publish('state', { type: 'state', state });
+      await rest.channels.get(`room-${room}`).publish('state', { type: 'state', state });
     } catch {}
 
     return NextResponse.json({ ok: true, state, userRole: assignedRole });
