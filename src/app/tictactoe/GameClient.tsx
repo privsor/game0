@@ -66,6 +66,7 @@ export default function GameClient() {
   const joinPromptedRef = useRef(false);
   const [joining, setJoining] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   // Generate stable anonymous user ID
   const userId = useMemo(() => {
@@ -79,6 +80,19 @@ export default function GameClient() {
   }, []);
 
   const channelName = useMemo(() => (roomCode ? `room-${roomCode}` : null), [roomCode]);
+
+  // Lock page scrolling while this view is active (app-like feel)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     if (!channelName || !userId) return;
@@ -293,9 +307,10 @@ export default function GameClient() {
   };
 
   return (
-    <main className="flex h-auto md:h-screen md:overflow-hidden flex-col items-center justify-center bg-black text-white px-4 py-6 md:py-0">
-      <div className="w-full max-w-xl">
-        <h1 className="text-center text-3xl font-extrabold tracking-tight mb-4">Tic Tac Toe</h1>
+    <main className="flex min-h-screen md:fixed md:inset-0 md:h-screen md:overflow-hidden flex-col bg-black text-white px-4 py-6 md:p-0">
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="w-full max-w-xl">
+        <h1 className="text-center text-3xl font-extrabold tracking-tight mb-3 md:mb-2">Tic Tac Toe</h1>
 
         {!roomCode ? (
           <JoinPanel
@@ -333,6 +348,12 @@ export default function GameClient() {
                 className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
               >
                 {copied ? 'Copied!' : 'Copy link'}
+              </button>
+              <button
+                onClick={() => setShowInvite(true)}
+                className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
+              >
+                Bring a friend
               </button>
             </div>
 
@@ -415,22 +436,69 @@ export default function GameClient() {
               ) : null}
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end md:justify-center">
               <button
                 onClick={() => {
                   setRoomCode("");
                   setState(initialState());
                   setRole(null);
                 }}
-                className="rounded bg-red-500/80 hover:bg-red-500 px-4 py-2"
+                className="rounded bg-red-500/80 hover:bg-red-500 px-4 py-2 md:fixed md:bottom-6 md:right-6"
               >
                 Leave
               </button>
             </div>
           </div>
         )}
-      </div>
 
+      {/* Invite modal */}
+      {roomCode && showInvite && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-xl text-center">
+            {(() => {
+              const hostName = state.names?.X || 'Player 1';
+              return (
+                <>
+                  <h2 className="text-xl font-bold mb-1">Scan to join {hostName}'s room</h2>
+                  <div className="text-white/60 text-sm mb-3">Room {roomCode}</div>
+                </>
+              );
+            })()}
+            {(() => {
+              const url = typeof window !== 'undefined' ? window.location.href : '';
+              const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
+              return (
+                <>
+                  <div className="flex items-center justify-center mb-4">
+                    {/* External QR image service for simplicity; can be replaced with local generator later */}
+                    <img src={qrSrc} alt="Room QR code" className="rounded bg-white/5 p-2" />
+                  </div>
+                  <div className="text-xs text-white/60 break-all mb-3 px-2">{url}</div>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => {
+                        if (navigator.share) {
+                          navigator.share({ title: 'Join my Tic Tac Toe room', url }).catch(() => {});
+                        } else {
+                          navigator.clipboard?.writeText(url).catch(() => {});
+                        }
+                      }}
+                      className="rounded bg-white text-black hover:bg-white/90 px-4 py-2 font-semibold"
+                    >Share</button>
+                    <button
+                      onClick={() => setShowInvite(false)}
+                      className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2"
+                    >Close</button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+        </div>
+      </div>
+      
       {/* Join modal */}
       {roomCode && showJoin && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
