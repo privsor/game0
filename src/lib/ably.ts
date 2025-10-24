@@ -31,7 +31,7 @@ export function getClient(): Ably.Realtime {
   return cached;
 }
 
-export async function getChannel(name: string): Promise<any> {
+export async function getChannel(name: string, options?: any): Promise<any> {
   const client = getClient();
   await new Promise<void>((resolve) => {
     if (client.connection.state === "connected") return resolve();
@@ -41,5 +41,5 @@ export async function getChannel(name: string): Promise<any> {
     };
     client.connection.on("connected", onConnected);
   });
-  return client.channels.get(name);
+  return (client.channels as any).get(name, options);
 }

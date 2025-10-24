@@ -16,6 +16,9 @@ export const env = createEnv({
 		DATABASE_URL: z.string().url(),
 		// Ably API key for server-side token minting
 		ABLY_API_KEY: z.string(),
+		// Upstash Redis for authoritative game state
+		UPSTASH_REDIS_REST_URL: z.string().url(),
+		UPSTASH_REDIS_REST_TOKEN: z.string(),
 		NODE_ENV: z
 			.enum(["development", "test", "production"])
 			.default("development"),
@@ -41,6 +44,8 @@ export const env = createEnv({
 		AUTH_DISCORD_SECRET: process.env.AUTH_DISCORD_SECRET,
 		DATABASE_URL: process.env.DATABASE_URL,
 		ABLY_API_KEY: process.env.ABLY_API_KEY,
+		UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+		UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
 		NEXT_PUBLIC_ABLY_CLIENT_ID: process.env.NEXT_PUBLIC_ABLY_CLIENT_ID,
 		NODE_ENV: process.env.NODE_ENV,
 	},
