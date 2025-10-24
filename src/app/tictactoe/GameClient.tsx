@@ -41,6 +41,25 @@ function calculateWinner(board: Cell[]): GameState["winner"] {
   return null;
 }
 
+function winningLine(board: Cell[]): number[] | null {
+  const lines: Array<[number, number, number]> = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ];
+  for (const [a, b, c] of lines) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return [a, b, c];
+    }
+  }
+  return null;
+}
+
 function initialState(): GameState {
   return {
     board: Array<Cell>(9).fill(null),
@@ -439,6 +458,7 @@ export default function GameClient() {
               <Board 
                 board={state.board} 
                 onMove={makeMove} 
+                highlight={state.winner && state.winner !== 'Draw' ? winningLine(state.board) : null}
                 disabled={
                   !!state.winner ||
                   (role === null) || (

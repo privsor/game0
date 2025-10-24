@@ -8,10 +8,12 @@ export function Board({
   board,
   onMove,
   disabled,
+  highlight,
 }: {
   board: Cell[];
   onMove: (idx: number) => void;
   disabled?: boolean;
+  highlight?: number[] | null;
 }) {
   return (
     <div className="grid grid-cols-3 gap-2 w-full max-w-md">
@@ -19,6 +21,7 @@ export function Board({
         const row = Math.floor(i / 3) + 1;
         const col = (i % 3) + 1;
         const isDisabled = !!cell || !!disabled;
+        const isHighlighted = Array.isArray(highlight) ? highlight.includes(i) : false;
         const label = cell
           ? `Cell ${row}, ${col}, ${cell}`
           : `Place at row ${row}, column ${col}`;
@@ -37,7 +40,12 @@ export function Board({
             title={label}
             tabIndex={0}
             disabled={isDisabled}
-            className="aspect-square rounded-lg border border-white/20 bg-white/5 hover:bg-white/10 disabled:opacity-50 disabled:hover:bg-white/5 flex items-center justify-center text-5xl font-extrabold transition-colors"
+            className={
+              [
+                "aspect-square rounded-lg border bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5 flex items-center justify-center text-5xl font-extrabold transition-colors",
+                isHighlighted ? "border-white/80 opacity-100 text-white" : "border-white/20 disabled:opacity-50",
+              ].join(" ")
+            }
           >
             {cell ?? ""}
           </button>
