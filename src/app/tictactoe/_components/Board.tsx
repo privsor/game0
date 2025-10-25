@@ -42,8 +42,8 @@ export function Board({
             disabled={isDisabled}
             className={
               [
-                "aspect-square rounded-lg border bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5 flex items-center justify-center text-5xl font-extrabold transition-colors",
-                isHighlighted ? "border-white/80 opacity-100 text-white" : "border-white/20 disabled:opacity-50",
+                "aspect-square rounded-lg border border-white/30 text-white bg-white/10 hover:bg-white/30 disabled:hover:bg-white/5 flex items-center justify-center text-5xl font-extrabold transition-colors",
+                isHighlighted ? "border-white opacity-100 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "disabled:border-white/20 disabled:bg-white/10",
               ].join(" ")
             }
           >
