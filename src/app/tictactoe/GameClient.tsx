@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { useRouter, useSearchParams } from "next/navigation";
 import { nanoid } from "nanoid";
 import { getChannel } from "~/lib/ably";
@@ -86,6 +87,8 @@ export default function GameClient() {
   const [joining, setJoining] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  // Tooltip for invite button when only Player 1 is present
+  const [showInviteHint, setShowInviteHint] = useState(false);
 
   // Generate stable anonymous user ID
   const userId = useMemo(() => {
@@ -97,6 +100,14 @@ export default function GameClient() {
     }
     return id;
   }, []);
+
+  // Compute when to show the invite tooltip (only X present, O missing)
+  useEffect(() => {
+    const hasX = !!(state.players?.X);
+    const hasO = !!(state.players?.O);
+    const shouldShow = !!roomCode && hasX && !hasO && !showInvite; // hide while invite modal is open
+    setShowInviteHint(shouldShow);
+  }, [roomCode, state.players?.X, state.players?.O, showInvite]);
 
   const channelName = useMemo(() => (roomCode ? `room-${roomCode}` : null), [roomCode]);
 
@@ -368,7 +379,7 @@ export default function GameClient() {
     <main className="flex min-h-screen md:fixed md:inset-0 md:h-screen md:overflow-hidden flex-col bg-black text-white px-4 py-6 md:p-0">
       <div className="w-full h-full flex items-center justify-center">
         <div className="w-full max-w-xl">
-        <h1 className="text-center text-3xl font-extrabold tracking-tight mb-3 md:mb-2">Tic Tac Toe</h1>
+        <h1 className="text-center text-2xl md:text-3xl font-extrabold tracking-tight mb-3 md:mb-2">Tic Tac Toe</h1>
 
         {!roomCode ? (
           <JoinPanel
@@ -378,13 +389,13 @@ export default function GameClient() {
             onJoin={joinRoom}
           />
         ) : (
-          <div className="grid gap-5">
+          <div className="grid gap-2 md:gap-5">
             
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 flex items-center justify-center text-white/70 text-sm gap-4">
+            <div className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 flex flex-wrap md:flex-nowrap items-center justify-between text-white/70 text-sm gap-2 md:gap-4 overflow-x-auto">
               <div className="text-white/80">
                 Room <span className="ml-2 rounded bg-white/10 px-2 py-0.5 font-mono">{roomCode}</span>
               </div>
-              <span>·</span>
+              <span className="hidden sm:inline">·</span>
               <span className="inline-flex items-center gap-2">
                 <span
                   className={`inline-block h-2 w-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}
@@ -392,9 +403,9 @@ export default function GameClient() {
                 />
                 <span className="sr-only">{connected ? 'Online' : 'Connecting'}</span>
               </span>
-              <span>·</span>
-              <span>Online {peers}</span>
-              <span>·</span>
+              <span className="hidden sm:inline">·</span>
+              <span><span className="hidden sm:inline">Online </span>{peers}</span>
+              <span className="hidden sm:inline">·</span>
               <button
                 onClick={() => {
                   const url = typeof window !== "undefined" ? window.location.href : "";
@@ -405,14 +416,33 @@ export default function GameClient() {
                 }}
                 className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
               >
-                {copied ? 'Copied!' : 'Copy link'}
+                {copied ? 'Copied!' : (<><span className="sm:hidden">Copy link</span><span className="hidden sm:inline">Copy link</span></>)}
               </button>
-              <button
-                onClick={() => setShowInvite(true)}
-                className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
-              >
-                Bring a friend
-              </button>
+              <Tooltip.Provider disableHoverableContent>
+                <Tooltip.Root open={showInviteHint}>
+                  <Tooltip.Trigger asChild>
+                    <button
+                      onClick={() => setShowInvite(true)}
+                      className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
+                    >
+                      <span className="sm:hidden">Bring a friend</span>
+                      <span className="hidden sm:inline">Bring a friend</span>
+                    </button>
+                  </Tooltip.Trigger>
+                  <Tooltip.Portal>
+                    <Tooltip.Content
+                      side="top"
+                      align="center"
+                      sideOffset={8}
+                      className="z-[9999] rounded-xl animate-pulse bg-white text-black text-xs font-semibold px-3 py-2 shadow-2xl ring-2 ring-black/10 data-[state=delayed-open]:animate-in data-[state=closed]:animate-out data-[side=top]:slide-in-from-bottom-1"
+                    >
+                      Click here to invite
+                      <span className="hidden sm:inline text-[10px] font-normal text-black/60 ml-1">(share link)</span>
+                      <Tooltip.Arrow className="fill-white drop-shadow" />
+                    </Tooltip.Content>
+                  </Tooltip.Portal>
+                </Tooltip.Root>
+              </Tooltip.Provider>
             </div>
 
             {/* Status badges */}
@@ -509,7 +539,6 @@ export default function GameClient() {
             </div>
           </div>
         )}
-
       {/* Invite modal */}
       {roomCode && showInvite && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
