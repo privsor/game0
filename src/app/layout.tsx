@@ -7,6 +7,7 @@ import { Geist } from "next/font/google";
 import { TRPCReactProvider } from "~/trpc/react";
 import { auth } from "~/server/auth";
 import { Analytics } from "@vercel/analytics/react";
+import AuthTrigger from "./_components/AuthTrigger";
 
 export const metadata: Metadata = {
   title: "Daddy Games",
@@ -32,12 +33,7 @@ export default async function RootLayout({
             <nav className="flex items-center gap-4 text-sm">
               <Link href="/tictactoe" className="text-white/80 hover:text-white">Tic Tac Toe</Link>
               <span className="text-white/30">|</span>
-              <Link
-                href={session ? "/api/auth/signout" : "/api/auth/signin"}
-                className="rounded bg-white/10 px-3 py-1.5 hover:bg-white/20"
-              >
-                {session ? "Sign out" : "Sign in"}
-              </Link>
+              <AuthTrigger signedIn={!!session} size="sm" />
             </nav>
           </div>
         </header>

@@ -13,6 +13,8 @@ export const env = createEnv({
 				: z.string().optional(),
 		AUTH_DISCORD_ID: z.string(),
 		AUTH_DISCORD_SECRET: z.string(),
+		AUTH_GOOGLE_ID: z.string(),
+		AUTH_GOOGLE_SECRET: z.string(),
 		DATABASE_URL: z.string().url(),
 		// Ably API key for server-side token minting
 		ABLY_API_KEY: z.string(),
@@ -42,6 +44,8 @@ export const env = createEnv({
 		AUTH_SECRET: process.env.AUTH_SECRET,
 		AUTH_DISCORD_ID: process.env.AUTH_DISCORD_ID,
 		AUTH_DISCORD_SECRET: process.env.AUTH_DISCORD_SECRET,
+		AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
+		AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
 		DATABASE_URL: process.env.DATABASE_URL,
 		ABLY_API_KEY: process.env.ABLY_API_KEY,
 		UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
