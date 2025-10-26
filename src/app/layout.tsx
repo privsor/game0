@@ -6,6 +6,7 @@ import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "~/trpc/react";
 import { auth } from "~/server/auth";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
   title: "Daddy Games",
@@ -41,6 +42,7 @@ export default async function RootLayout({
           </div>
         </header>
         <TRPCReactProvider>{children}</TRPCReactProvider>
+        <Analytics />
       </body>
     </html>
   );
