@@ -2,6 +2,7 @@ export const revalidate = 0;
 export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { getRedis } from "~/server/redis";
+import { auth } from "~/server/auth";
 
 function boardStringToArray(b: string) {
   return b.split("").map((c) => (c === '-' ? null : (c as 'X'|'O')));
@@ -12,14 +13,18 @@ export async function GET(req: Request) {
     const redis = getRedis();
     const { searchParams } = new URL(req.url);
     const room = (searchParams.get('room') || '').toUpperCase();
-    const userId = searchParams.get('userId') || '';
+    let userId = searchParams.get('userId') || '';
+    try {
+      const session = await auth();
+      if (session?.user?.id) userId = session.user.id;
+    } catch {}
     
     if (!room || !userId) {
       return NextResponse.json({ error: 'invalid-input' }, { status: 400 });
     }
 
     const key = `ttt:room:${room}`;
-    const vals = await (redis as any).hmget(key, 'b', 'n', 'w', 't', 'x', 'o', 'xn', 'on');
+    const vals = await (redis as any).hmget(key, 'b', 'n', 'w', 't', 'x', 'o', 'xn', 'on', 'xa', 'oa');
     
     if (!vals || !vals.b) {
       // Room doesn't exist, return initial state
@@ -42,6 +47,8 @@ export async function GET(req: Request) {
     const po = (vals.o ?? '') as string;
     const xn = (vals.xn ?? '') as string;
     const on = (vals.on ?? '') as string;
+    const xa = (vals.xa ?? '') as string;
+    const oa = (vals.oa ?? '') as string;
 
     const state = {
       board: boardStringToArray(b),
@@ -50,6 +57,7 @@ export async function GET(req: Request) {
       turn,
       players: { X: px || null, O: po || null },
       names: { X: (xn || null) as string | null, O: (on || null) as string | null },
+      avatars: { X: (xa || null) as string | null, O: (oa || null) as string | null },
     };
 
     const userRole = userId === px ? 'X' : userId === po ? 'O' : null;

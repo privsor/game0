@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Ably from "ably";
 import { getRedis } from "~/server/redis";
 import { env } from "~/env";
+import { auth } from "~/server/auth";
 
 // Redis state layout (hash at key ttt:room:{ROOM})
 // b: 9-char string ("-" empty)
@@ -84,7 +85,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const room: string = (body?.room || '').toUpperCase();
     const idx: number = Number(body?.idx);
-    const userId: string = body?.userId || '';
+    let userId: string = body?.userId || '';
+
+    // Prefer authenticated user id if a session exists
+    try {
+      const session = await auth();
+      if (session?.user?.id) {
+        userId = session.user.id;
+      }
+    } catch {}
     if (!room || Number.isNaN(idx) || !userId) {
       return NextResponse.json({ error: 'invalid-input' }, { status: 400 });
     }
@@ -115,10 +124,12 @@ export async function POST(req: Request) {
     const px = (res[5] ?? '') as string;
     const po = (res[6] ?? '') as string;
 
-    // Read names if present
-    const nv = await (redis as any).hmget(key, 'xn', 'on');
+    // Read names and avatars if present
+    const nv = await (redis as any).hmget(key, 'xn', 'on', 'xa', 'oa');
     const xn = (nv?.xn ?? '') as string;
     const on = (nv?.on ?? '') as string;
+    const xa = (nv?.xa ?? '') as string;
+    const oa = (nv?.oa ?? '') as string;
 
     const state = {
       board: boardStringToArray(b),
@@ -127,6 +138,7 @@ export async function POST(req: Request) {
       turn,
       players: { X: px || null, O: po || null },
       names: { X: (xn || null) as string | null, O: (on || null) as string | null },
+      avatars: { X: (xa || null) as string | null, O: (oa || null) as string | null },
     };
 
     // Publish authoritative state to Ably

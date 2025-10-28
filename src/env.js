@@ -24,6 +24,12 @@ export const env = createEnv({
 		NODE_ENV: z
 			.enum(["development", "test", "production"])
 			.default("development"),
+		// Razorpay keys for payment processing
+		RAZORPAY_KEY_ID: z.string(),
+		RAZORPAY_KEY_SECRET: z.string(),
+		RAZORPAY_WEBHOOK_SECRET: z.string(),
+		// Comma-separated list of admin emails
+		ADMIN_EMAILS: z.string().optional(),
 	},
 
 	/**
@@ -34,6 +40,7 @@ export const env = createEnv({
 	client: {
 		// Optional clientId to identify users in Ably (helpful for presence)
 		NEXT_PUBLIC_ABLY_CLIENT_ID: z.string().optional(),
+		NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string(),
 	},
 
 	/**
@@ -52,6 +59,11 @@ export const env = createEnv({
 		UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
 		NEXT_PUBLIC_ABLY_CLIENT_ID: process.env.NEXT_PUBLIC_ABLY_CLIENT_ID,
 		NODE_ENV: process.env.NODE_ENV,
+		RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+		RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+		RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+		NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+		ADMIN_EMAILS: process.env.ADMIN_EMAILS,
 	},
 	/**
 	 * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

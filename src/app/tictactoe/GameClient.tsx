@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useRouter, useSearchParams } from "next/navigation";
 import { nanoid } from "nanoid";
@@ -8,6 +8,8 @@ import { getChannel } from "~/lib/ably";
 import { Board } from "./_components/Board";
 import type { Cell } from "./_components/Board";
 import { JoinPanel } from "./_components/JoinPanel";
+import { signIn, useSession } from "next-auth/react";
+import Image from "next/image";
 
 type GameState = {
   board: Cell[]; // 9 cells
@@ -15,12 +17,13 @@ type GameState = {
   winner: "X" | "O" | "Draw" | null;
   players?: { X: string | null; O: string | null };
   names?: { X: string | null; O: string | null };
+  avatars?: { X: string | null; O: string | null };
 };
 
 type Role = "X" | "O";
 
 type WireEvent =
-  | { type: "state"; state: GameState & { turn?: number; players?: { X: string | null; O: string | null }, names?: { X: string | null; O: string | null } } };
+  | { type: "state"; state: GameState & { turn?: number; players?: { X: string | null; O: string | null }, names?: { X: string | null; O: string | null }, avatars?: { X: string | null; O: string | null } } };
 
 function calculateWinner(board: Cell[]): GameState["winner"] {
   const lines: Array<[number, number, number]> = [
@@ -68,10 +71,12 @@ function initialState(): GameState {
     winner: null,
     players: { X: null, O: null },
     names: { X: null, O: null },
+    avatars: { X: null, O: null },
   };
 }
 
 export default function GameClient() {
+  const { data: session } = useSession();
   const router = useRouter();
   const search = useSearchParams();
   const initialRoom = (search?.get("room") || "").toUpperCase();
@@ -83,6 +88,7 @@ export default function GameClient() {
   const [peers, setPeers] = useState(0);
   const [showJoin, setShowJoin] = useState(false);
   const [joinName, setJoinName] = useState("");
+  const socialCallbackUrl = `/tictactoe?room=${roomCode}`;
   const joinPromptedRef = useRef(false);
   const [joining, setJoining] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -91,6 +97,13 @@ export default function GameClient() {
   const [shareDone, setShareDone] = useState<null | 'copied' | 'shared'>(null);
   // Tooltip for invite button when only Player 1 is present
   const [showInviteHint, setShowInviteHint] = useState(false);
+  // Track peers count locally to avoid presence.get on every presence event
+  const peersCountRef = useRef(0);
+  // Refs for values used inside effects without causing re-subscribe churn
+  const roomCodeRef = useRef(roomCode);
+  const userIdRef = useRef("");
+
+  useEffect(() => { roomCodeRef.current = roomCode; }, [roomCode]);
 
   // Generate stable anonymous user ID
   const userId = useMemo(() => {
@@ -102,6 +115,9 @@ export default function GameClient() {
     }
     return id;
   }, []);
+
+  // keep a ref in sync for effects/handlers without adding as dependency unnecessarily
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
 
   // Compute when to show the invite tooltip (only X present, O missing)
   useEffect(() => {
@@ -185,21 +201,43 @@ export default function GameClient() {
       try { setConnected(ch.client.connection.state === 'connected'); } catch {}
 
       try {
-        await ch.presence.enter({ at: Date.now() });
+        // Fire-and-forget presence enter to avoid blocking
+        ch.presence.enter({ at: Date.now() }).catch(() => {});
+        // Seed peers once
         const members: any[] = await ch.presence.get();
-        setPeers(members.length);
+        peersCountRef.current = members.length;
+        setPeers(peersCountRef.current);
       } catch {}
 
       const onMessage = (msg: any) => {
         const data = msg.data as WireEvent;
         if (!data) return;
         if (data.type === "state") {
-          setState({
+          const incoming = {
             board: data.state.board,
             next: data.state.next,
             winner: data.state.winner ?? null,
             players: data.state.players ?? { X: null, O: null },
             names: data.state.names ?? { X: null, O: null },
+            avatars: data.state.avatars ?? { X: null, O: null },
+          } as GameState;
+          setState((prev) => {
+            // Shallow, targeted equality checks to avoid unnecessary renders
+            const sameBoard = prev.board === incoming.board || (
+              prev.board.length === incoming.board.length && prev.board.every((v, i) => v === incoming.board[i])
+            );
+            const sameNext = prev.next === incoming.next;
+            const sameWinner = prev.winner === incoming.winner;
+            const samePlayers = (prev.players?.X ?? null) === (incoming.players?.X ?? null)
+              && (prev.players?.O ?? null) === (incoming.players?.O ?? null);
+            const sameNames = (prev.names?.X ?? null) === (incoming.names?.X ?? null)
+              && (prev.names?.O ?? null) === (incoming.names?.O ?? null);
+            const sameAvatars = (prev.avatars?.X ?? null) === (incoming.avatars?.X ?? null)
+              && (prev.avatars?.O ?? null) === (incoming.avatars?.O ?? null);
+            if (sameBoard && sameNext && sameWinner && samePlayers && sameNames && sameAvatars) {
+              return prev;
+            }
+            return incoming;
           });
         }
       };
@@ -212,13 +250,13 @@ export default function GameClient() {
       };
 
       ch.subscribe(onMessage);
-      ch.presence.subscribe("enter", async () => {
-        const membersNow: any[] = await ch.presence.get();
-        setPeers(membersNow.length);
+      ch.presence.subscribe("enter", () => {
+        peersCountRef.current = Math.max(0, peersCountRef.current + 1);
+        setPeers(peersCountRef.current);
       });
-      ch.presence.subscribe("leave", async () => {
-        const membersNow: any[] = await ch.presence.get();
-        setPeers(membersNow.length);
+      ch.presence.subscribe("leave", () => {
+        peersCountRef.current = Math.max(0, peersCountRef.current - 1);
+        setPeers(peersCountRef.current);
       });
       ch.client.connection.on("connected", onConnected);
       ch.client.connection.on("disconnected", onDisconnected);
@@ -236,7 +274,7 @@ export default function GameClient() {
     return () => {
       unsub?.();
     };
-  }, [channelName, userId, roomCode]);
+  }, [channelName]);
 
   useEffect(() => {
     if (channelName && role) {
@@ -259,20 +297,33 @@ export default function GameClient() {
 
   // While invite modal is open, poll server state as a fallback (in case realtime publish is delayed in production)
   useEffect(() => {
-    if (!showInvite || !roomCode || !userId) return;
+    if (!showInvite || !roomCodeRef.current || !userIdRef.current) return;
+    // Only poll as a fallback when the tab is hidden; rely on realtime otherwise
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') return;
     let timer: any = null;
+    const controller = new AbortController();
     const tick = async () => {
       try {
-        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`);
+        const res = await fetch(`/api/tictactoe/state?room=${roomCodeRef.current}&userId=${userIdRef.current}`,
+          { signal: controller.signal, cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data?.ok) {
-            setState({
-              board: data.state.board,
-              next: data.state.next,
-              winner: data.state.winner ?? null,
-              players: data.state.players ?? { X: null, O: null },
-              names: data.state.names ?? { X: null, O: null },
+            setState((prev) => {
+              const incoming = {
+                board: data.state.board,
+                next: data.state.next,
+                winner: data.state.winner ?? null,
+                players: data.state.players ?? { X: null, O: null },
+                names: data.state.names ?? { X: null, O: null },
+              } as GameState;
+              const sameBoard = prev.board.length === incoming.board.length && prev.board.every((v, i) => v === incoming.board[i]);
+              const sameNext = prev.next === incoming.next;
+              const sameWinner = prev.winner === incoming.winner;
+              const samePlayers = (prev.players?.X ?? null) === (incoming.players?.X ?? null) && (prev.players?.O ?? null) === (incoming.players?.O ?? null);
+              const sameNames = (prev.names?.X ?? null) === (incoming.names?.X ?? null) && (prev.names?.O ?? null) === (incoming.names?.O ?? null);
+              if (sameBoard && sameNext && sameWinner && samePlayers && sameNames) return prev;
+              return incoming;
             });
             if (data.state.players?.X && data.state.players?.O) {
               setShowInvite(false);
@@ -286,24 +337,26 @@ export default function GameClient() {
     timer = setInterval(tick, 2000);
     return () => {
       if (timer) clearInterval(timer);
+      controller.abort();
     };
-  }, [showInvite, roomCode, userId]);
+  }, [showInvite]);
 
-  const startNewRoom = () => {
+  const startNewRoom = useCallback(() => {
     const code = nanoid(6).toUpperCase();
     setRoomCode(code);
     router.replace(`/tictactoe?room=${code}`);
-  };
+  }, [router]);
 
-  const joinRoom = () => {
+  const joinRoom = useCallback(() => {
     if (inputCode.trim().length >= 4) {
       const code = inputCode.trim().toUpperCase();
+      if (code === roomCode) return;
       setRoomCode(code);
       router.replace(`/tictactoe?room=${code}`);
     }
-  };
+  }, [inputCode, roomCode, router]);
 
-  const makeMove = async (idx: number) => {
+  const makeMove = useCallback(async (idx: number) => {
     if (!channelName || state.winner) return;
     // optimistic UI: apply locally and let Ably authoritative state reconcile
     setState((prev) => {
@@ -340,12 +393,12 @@ export default function GameClient() {
         } catch {}
       }
     } catch {}
-  };
+  }, [channelName, roomCode, state.winner, userId]);
 
   // Reset functionality removed as per product decision
 
   // Join helper inside component scope
-  const joinAs = async (preferredRole: Role | 'auto') => {
+  const joinAs = useCallback(async (preferredRole: Role | 'auto') => {
     if (!roomCode || !userId || joining) return;
     setJoining(true);
     // Persist name immediately for better UX
@@ -375,7 +428,7 @@ export default function GameClient() {
     } finally {
       setJoining(false);
     }
-  };
+  }, [joinName, joining, roomCode, userId]);
 
   return (
     <main className="flex min-h-screen md:fixed md:inset-0 md:h-screen md:overflow-hidden flex-col bg-black text-white px-4 py-6 md:p-0">
@@ -473,8 +526,14 @@ export default function GameClient() {
                 const isMyTurn = role && state.next === role;
                 if (isMyTurn) return null;
                 const nextName = state.next === 'X' ? (state.names?.X || 'Player 1') : (state.names?.O || 'Player 2');
+                const nextAvatar = state.next === 'X' ? (state.avatars?.X || null) : (state.avatars?.O || null);
                 return (
-                  <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-white/80">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-white/80">
+                    {nextAvatar ? (
+                      <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
+                        <Image src={nextAvatar} alt="avatar" width={16} height={16} />
+                      </span>
+                    ) : null}
                     {nextName}'s turn
                   </span>
                 );
@@ -482,8 +541,26 @@ export default function GameClient() {
             </div>
 
             {/* Players summary */}
-            <div className="text-center text-white/70 text-sm">
-              X: <span className="font-semibold">{state.names?.X || '—'}</span> · O: <span className="font-semibold">{state.names?.O || '—'}</span>
+            <div className="text-center text-white/70 text-sm flex items-center justify-center gap-3">
+              <span className="inline-flex items-center gap-1">
+                X:
+                {state.avatars?.X ? (
+                  <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
+                    <Image src={state.avatars.X} alt="X avatar" width={16} height={16} />
+                  </span>
+                ) : null}
+                <span className="font-semibold">{state.names?.X || '—'}</span>
+              </span>
+              <span className="text-white/40">·</span>
+              <span className="inline-flex items-center gap-1">
+                O:
+                {state.avatars?.O ? (
+                  <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
+                    <Image src={state.avatars.O} alt="O avatar" width={16} height={16} />
+                  </span>
+                ) : null}
+                <span className="font-semibold">{state.names?.O || '—'}</span>
+              </span>
             </div>
 
             <div className="flex justify-center">
@@ -508,7 +585,17 @@ export default function GameClient() {
             <div className="text-center text-white/80">
               You are <span className="font-bold">{role ?? "Spectator"}</span>
               {role ? (
-                <span className="ml-2 text-white/60">(
+                <span className="ml-2 inline-flex items-center gap-1 text-white/60">(
+                  {role === 'X' && state.avatars?.X ? (
+                    <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
+                      <Image src={state.avatars.X} alt="Your avatar" width={16} height={16} />
+                    </span>
+                  ) : null}
+                  {role === 'O' && state.avatars?.O ? (
+                    <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
+                      <Image src={state.avatars.O} alt="Your avatar" width={16} height={16} />
+                    </span>
+                  ) : null}
                   {role === 'X' ? (state.names?.X || '') : (state.names?.O || '')}
                 )</span>
               ) : null}
@@ -627,13 +714,79 @@ export default function GameClient() {
                 return (
                   <>
                     <h2 className="text-xl font-bold mb-3">Create your player</h2>
-                    <p className="text-white/70 mb-3">Enter your name. You will play as X.</p>
+                    {/* Current room players overview */}
+                    <div className="mb-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-white/50">X</span>
+                        {state.avatars?.X ? (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
+                            <Image src={state.avatars.X} alt="X avatar" width={20} height={20} />
+                          </span>
+                        ) : (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
+                        )}
+                        <span className="font-medium">{state.names?.X || "—"}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-white/50">O</span>
+                        {state.avatars?.O ? (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
+                            <Image src={state.avatars.O} alt="O avatar" width={20} height={20} />
+                          </span>
+                        ) : (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
+                        )}
+                        <span className="font-medium">{state.names?.O || "—"}</span>
+                      </span>
+                    </div>
+
+                    {session?.user ? (
+                      <>
+                        <p className="text-white/70 mb-3 inline-flex items-center gap-2">
+                          <span>Signed in as</span>
+                          {session.user.image ? (
+                            <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
+                              <Image src={session.user.image} alt="Your avatar" width={20} height={20} />
+                            </span>
+                          ) : null}
+                          <span className="font-semibold">{session.user.name || "Player"}</span>.
+                          <span>Your name will be used.</span>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-white/70 mb-4">Join quickly with an account, or continue without one.</p>
+                        <div className="mb-4 grid gap-2">
+                          <button
+                            onClick={() => signIn("discord", { callbackUrl: socialCallbackUrl })}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2 font-medium text-white hover:opacity-90"
+                          >
+                            <Image src="icons/discord.svg" alt="Discord" width={20} height={20} className="invert brightness-0" />
+                            Continue with Discord
+                          </button>
+                          <button
+                            onClick={() => signIn("google", { callbackUrl: socialCallbackUrl })}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 font-medium text-black hover:bg-white/90"
+                          >
+                            <Image src="icons/google.svg" alt="Google" width={20} height={20} />
+                            Continue with Google
+                          </button>
+                        </div>
+                        <div className="my-3 flex items-center gap-3 text-xs text-white/50">
+                          <div className="h-px flex-1 bg-white/10" />
+                          <span>or join without account</span>
+                          <div className="h-px flex-1 bg-white/10" />
+                        </div>
+                        <p className="text-white/70 mb-3">Enter your name. You will play as X.</p>
+                      </>
+                    )}
                     <input
                       autoFocus
-                      value={joinName}
+                      value={session?.user?.name ?? joinName}
                       onChange={(e) => setJoinName(e.target.value)}
                       placeholder="Player 1"
                       className="w-full rounded-lg bg-white/10 px-4 py-2 outline-none mb-4"
+                      disabled={!!session?.user}
                     />
                     <div className="flex gap-3 justify-end">
                       <button
@@ -654,14 +807,77 @@ export default function GameClient() {
                 return (
                   <>
                     <h2 className="text-xl font-bold mb-3">Join game</h2>
-                    <p className="text-white/70 mb-2">Going to play with <span className="font-semibold">{xn}</span></p>
-                    <label className="text-white/70 text-sm">Your player name</label>
+                    {/* Current room players overview */}
+                    <div className="mb-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-white/50">X</span>
+                        {state.avatars?.X ? (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
+                            <Image src={state.avatars.X} alt="X avatar" width={20} height={20} />
+                          </span>
+                        ) : (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
+                        )}
+                        <span className="font-medium">{state.names?.X || "—"}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-white/50">O</span>
+                        {state.avatars?.O ? (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
+                            <Image src={state.avatars.O} alt="O avatar" width={20} height={20} />
+                          </span>
+                        ) : (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
+                        )}
+                        <span className="font-medium">{state.names?.O || "—"}</span>
+                      </span>
+                    </div>
+
+                    {session?.user ? (
+                      <p className="text-white/70 mb-4 inline-flex items-center gap-2">
+                        <span>Signed in as</span>
+                        {session.user.image ? (
+                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
+                            <Image src={session.user.image} alt="Your avatar" width={20} height={20} />
+                          </span>
+                        ) : null}
+                        <span className="font-semibold">{session.user.name || "Player"}</span>.
+                        <span>Going to play with <span className="font-semibold">{xn}</span></span>
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-white/70 mb-4">Join with an account or continue as guest. Going to play with <span className="font-semibold">{xn}</span></p>
+                        <div className="mb-4 grid gap-2">
+                          <button
+                            onClick={() => signIn("discord", { callbackUrl: socialCallbackUrl })}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2 font-medium text-white hover:opacity-90"
+                          >
+                            <Image src="icons/discord.svg" alt="Discord" width={20} height={20} className="invert brightness-0" />
+                            Continue with Discord
+                          </button>
+                          <button
+                            onClick={() => signIn("google", { callbackUrl: socialCallbackUrl })}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 font-medium text-black hover:bg-white/90"
+                          >
+                            <Image src="icons/google.svg" alt="Google" width={20} height={20} />
+                            Continue with Google
+                          </button>
+                        </div>
+                        <div className="my-3 flex items-center gap-3 text-xs text-white/50">
+                          <div className="h-px flex-1 bg-white/10" />
+                          <span>or join without account</span>
+                          <div className="h-px flex-1 bg-white/10" />
+                        </div>
+                        <label className="text-white/70 text-sm">Your player name</label>
+                      </>
+                    )}
                     <input
                       autoFocus
-                      value={joinName}
+                      value={session?.user?.name ?? joinName}
                       onChange={(e) => setJoinName(e.target.value)}
                       placeholder="Player 2"
                       className="w-full rounded-lg bg-white/10 px-4 py-2 outline-none mb-4 mt-1"
+                      disabled={!!session?.user}
                     />
                     <div className="flex gap-3 justify-between">
                       <button

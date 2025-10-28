@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Ably from "ably";
 import { getRedis } from "~/server/redis";
 import { env } from "~/env";
+import { auth } from "~/server/auth";
 
 // Join contract:
 // POST /api/tictactoe/join
@@ -21,9 +22,20 @@ export async function POST(req: Request) {
     const redis = getRedis();
     const body = await req.json();
     const room: string = String(body?.room || '').toUpperCase();
-    const userId: string = String(body?.userId || '');
-    const name: string = String(body?.name || '').trim();
+    let userId: string = String(body?.userId || '');
+    let name: string = String(body?.name || '').trim();
     const preferredRole: 'X'|'O'|'auto' = (body?.preferredRole === 'X' || body?.preferredRole === 'O') ? body.preferredRole : 'auto';
+
+    // If a NextAuth session exists, prefer the authenticated identity
+    let session = null;
+    try {
+      session = await auth();
+      if (session?.user?.id) {
+        userId = session.user.id;
+        // Force the account display name when available to ensure consistency
+        if (session.user.name) name = session.user.name;
+      }
+    } catch {}
 
     if (!room || !userId) {
       return NextResponse.json({ error: 'invalid-input' }, { status: 400 });
@@ -50,7 +62,7 @@ export async function POST(req: Request) {
     }
 
     // Read current state
-    const vals = await (redis as any).hmget(key, 'b','n','w','t','x','o','xn','on');
+    const vals = await (redis as any).hmget(key, 'b','n','w','t','x','o','xn','on','xa','oa');
     let b = String(vals.b ?? '---------');
     let n = String(vals.n ?? 'X') as 'X'|'O';
     let w = String(vals.w ?? '-') as '-'|'X'|'O'|'D';
@@ -59,15 +71,26 @@ export async function POST(req: Request) {
     let po = String(vals.o ?? '');
     let xn = String(vals.xn ?? '');
     let on = String(vals.on ?? '');
+    let xa = String(vals.xa ?? '');
+    let oa = String(vals.oa ?? '');
 
     // If the user already holds a role, reaffirm and optionally update name
     let assignedRole: 'X'|'O'|null = null;
     if (px && userId === px) {
       assignedRole = 'X';
       if (name) xn = name;
+      if (body?.avatar || true) {
+        // Prefer session avatar when available; fall back to provided body.avatar if any
+        const img = (session?.user?.image || body?.avatar || '').trim();
+        if (img) xa = img;
+      }
     } else if (po && userId === po) {
       assignedRole = 'O';
       if (name) on = name;
+      if (body?.avatar || true) {
+        const img = (session?.user?.image || body?.avatar || '').trim();
+        if (img) oa = img;
+      }
     } else {
       // Try to assign based on preference
       const wantX = preferredRole === 'X' || preferredRole === 'auto';
@@ -75,11 +98,17 @@ export async function POST(req: Request) {
 
       if (!px && wantX) {
         px = userId; assignedRole = 'X'; xn = name || xn;
+        const img = (session?.user?.image || body?.avatar || '').trim();
+        if (img) xa = img;
       } else if (!po && wantO) {
         po = userId; assignedRole = 'O'; on = name || on;
+        const img = (session?.user?.image || body?.avatar || '').trim();
+        if (img) oa = img;
       } else if (!po && preferredRole === 'auto') {
         // If X was taken and O free in auto mode
         po = userId; assignedRole = 'O'; on = name || on;
+        const img = (session?.user?.image || body?.avatar || '').trim();
+        if (img) oa = img;
       } else {
         assignedRole = null; // spectator
       }
@@ -87,8 +116,8 @@ export async function POST(req: Request) {
 
     // Persist updates
     const updates: Record<string,string> = { u: String(Date.now()) };
-    if (assignedRole === 'X') { updates['x'] = px; updates['xn'] = xn; }
-    if (assignedRole === 'O') { updates['o'] = po; updates['on'] = on; }
+    if (assignedRole === 'X') { updates['x'] = px; updates['xn'] = xn; if (xa !== undefined) updates['xa'] = xa; }
+    if (assignedRole === 'O') { updates['o'] = po; updates['on'] = on; if (oa !== undefined) updates['oa'] = oa; }
     if (Object.keys(updates).length) {
       await (redis as any).hmset(key, updates);
       await (redis as any).pexpire(key, 24 * 60 * 60 * 1000);
@@ -101,6 +130,7 @@ export async function POST(req: Request) {
       turn: t,
       players: { X: px || null, O: po || null },
       names: { X: xn || null, O: on || null },
+      avatars: { X: (xa || null) as string | null, O: (oa || null) as string | null },
     } as const;
 
     // Publish state so UIs show names/roles immediately

@@ -8,6 +8,20 @@
       "when": 1761494463831,
       "tag": "0000_eminent_freak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1761642880236,
+      "tag": "0001_mature_tattoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1761658661890,
+      "tag": "0002_round_firebrand",
+      "breakpoints": true
     }
   ]
 }

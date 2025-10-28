@@ -106,3 +106,139 @@ export const verificationTokens = createTable(
 	}),
 	(t) => [primaryKey({ columns: [t.identifier, t.token] })],
 );
+
+// DADDY COINS & GIFTS
+
+// User wallet holds the current Daddy Coin balance
+export const wallets = createTable(
+	"wallet",
+	(d) => ({
+		userId: d
+			.varchar({ length: 255 })
+			.notNull()
+			.primaryKey()
+			.references(() => users.id),
+		balance: d.integer().notNull().default(0),
+		updatedAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.$onUpdate(() => new Date()),
+	}),
+);
+
+export const walletsRelations = relations(wallets, ({ one, many }) => ({
+	user: one(users, { fields: [wallets.userId], references: [users.id] }),
+	transactions: many(walletTransactions),
+	purchases: many(purchases),
+}));
+
+// Transactions ledger for wallet changes
+export const walletTransactions = createTable(
+	"wallet_txn",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		userId: d
+			.varchar({ length: 255 })
+			.notNull()
+			.references(() => users.id),
+		amount: d.integer().notNull(), // positive for earn, negative for spend
+		type: d.varchar({ length: 20 }).notNull(), // "earn" | "spend" | "adjust"
+		reason: d.varchar({ length: 255 }),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+	}),
+	(t) => [index("wallet_txn_user_id_idx").on(t.userId)],
+);
+
+export const walletTransactionsRelations = relations(
+	walletTransactions,
+	({ one }) => ({
+		user: one(users, {
+			fields: [walletTransactions.userId],
+			references: [users.id],
+		}),
+	}),
+);
+
+// Gift catalog (e.g., Amazon vouchers)
+export const gifts = createTable(
+	"gift",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		title: d.varchar({ length: 255 }).notNull(),
+		imageUrl: d.text(),
+		coinCost: d.integer().notNull(),
+		vendor: d.varchar({ length: 64 }).notNull().default("amazon"),
+		voucherAmount: d.integer(), // e.g., amount of the voucher in local currency
+		active: d.integer().notNull().default(1), // 1 = active, 0 = inactive
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+		updatedAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.$onUpdate(() => new Date()),
+	}),
+	(t) => [index("gift_active_idx").on(t.active)],
+);
+
+export const giftsRelations = relations(gifts, ({ many }) => ({
+	purchases: many(purchases),
+}));
+
+// Purchases connect users to gifts and store redemption data
+export const purchases = createTable(
+	"purchase",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		userId: d
+			.varchar({ length: 255 })
+			.notNull()
+			.references(() => users.id),
+		giftId: d
+			.integer()
+			.notNull()
+			.references(() => gifts.id),
+		redemptionCode: d.varchar({ length: 255 }), // revealed upon purchase
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+	}),
+	(t) => [
+		index("purchase_user_id_idx").on(t.userId),
+		index("purchase_gift_id_idx").on(t.giftId),
+	],
+);
+
+export const purchasesRelations = relations(purchases, ({ one }) => ({
+	user: one(users, { fields: [purchases.userId], references: [users.id] }),
+	gift: one(gifts, { fields: [purchases.giftId], references: [gifts.id] }),
+}));
+
+// Coin packages for purchase (admin-managed)
+export const coinPackages = createTable(
+	"coin_package",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		currency: d.varchar({ length: 8 }).notNull(), // "INR" | "GBP"
+		coins: d.integer().notNull(),
+		amountMinor: d.integer().notNull(), // paise for INR, pence for GBP
+		active: d.integer().notNull().default(1),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+		updatedAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.$onUpdate(() => new Date()),
+	}),
+	(t) => [
+		index("coin_pkg_currency_idx").on(t.currency),
+		index("coin_pkg_active_idx").on(t.active),
+	],
+);
