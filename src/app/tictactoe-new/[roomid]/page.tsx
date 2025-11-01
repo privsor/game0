@@ -2,6 +2,10 @@ import { auth } from "~/server/auth";
 import { getRedis } from "~/server/redis";
 import { notFound } from "next/navigation";
 import GameClientNew from "../GameClientNew";
+type Props = {
+  params?: Promise<{ roomid: string }>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
 export const revalidate = 0;
 export const dynamic = 'force-dynamic';
@@ -10,8 +14,9 @@ export const dynamic = 'force-dynamic';
 // - If an authenticated user opens the page and the room is empty, we initialize
 //   the room server-side assigning them as X (creator) without broadcasting.
 // - Guests will initialize via the existing /api/tictactoe/join flow on the client.
-export default async function Page({ params }: { params: { roomid: string } }) {
-  const room = String(params.roomid || "").toUpperCase();
+export default async function Page({ params }: Props) {
+  const p = await params;
+  const room = String(p?.roomid || "").toUpperCase();
   if (!room || room.length > 12) return notFound();
 
   const session = await auth();

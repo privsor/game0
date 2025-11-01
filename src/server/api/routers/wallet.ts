@@ -135,12 +135,13 @@ export const walletRouter = createTRPCRouter({
 
         // Generate a simple redemption code (in real app, integrate provider)
         const redemptionCode = `DADDY-${gift.id}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-        const inserted = await tx
+        const [purchase] = await tx
           .insert(purchases)
           .values({ userId, giftId: gift.id, redemptionCode })
           .returning();
+        if (!purchase) throw new Error("Failed to record purchase");
 
-        return { newBalance, purchase: inserted[0] } as const;
+        return { newBalance, purchase } as const;
       });
 
       // Notify client(s) about updated balance via Ably
