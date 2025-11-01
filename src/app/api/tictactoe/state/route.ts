@@ -24,9 +24,15 @@ export async function GET(req: Request) {
     }
 
     const key = `ttt:room:${room}`;
-    const vals = await (redis as any).hmget(key, 'b', 'n', 'w', 't', 'x', 'o', 'xn', 'on', 'xa', 'oa');
-    
-    if (!vals || !vals.b) {
+    const raw = await (redis as any).hmget(key, 'b', 'n', 'w', 't', 'x', 'o', 'xn', 'on', 'xa', 'oa', 'effx', 'effo', 'selx', 'selo', 'claim', 'claimAmount', 'claimWinnerRole', 'claimExpiresAt');
+    let hasB = false;
+    if (Array.isArray(raw)) {
+      hasB = !!raw[0];
+    } else if (raw && typeof raw === 'object') {
+      hasB = !!(raw as any).b;
+    }
+
+    if (!raw || !hasB) {
       // Room doesn't exist, return initial state
       const state = {
         board: Array(9).fill(null),
@@ -35,20 +41,54 @@ export async function GET(req: Request) {
         turn: 0,
         players: { X: null, O: null },
         names: { X: null as string | null, O: null as string | null },
+        avatars: { X: null as string | null, O: null as string | null },
       };
       return NextResponse.json({ ok: true, state, userRole: null });
     }
-
-    const b = String(vals.b ?? '---------');
-    const next = String(vals.n ?? 'X') as 'X'|'O';
-    const w = String(vals.w ?? '-') as '-'|'X'|'O'|'D';
-    const turn = Number(vals.t ?? 0);
-    const px = (vals.x ?? '') as string;
-    const po = (vals.o ?? '') as string;
-    const xn = (vals.xn ?? '') as string;
-    const on = (vals.on ?? '') as string;
-    const xa = (vals.xa ?? '') as string;
-    const oa = (vals.oa ?? '') as string;
+    let b = '---------', next: 'X'|'O' = 'X', w: '-'|'X'|'O'|'D' = '-', turn = 0;
+    let px = '', po = '', xn = '', on = '', xa = '', oa = '';
+    let effx = '0', effo = '0', selx = '', selo = '';
+    let claim = '0', claimAmount = '0', claimWinnerRole = '', claimExpiresAt = '';
+    if (Array.isArray(raw)) {
+      b = String(raw[0] ?? '---------');
+      next = String(raw[1] ?? 'X') as 'X'|'O';
+      w = String(raw[2] ?? '-') as '-'|'X'|'O'|'D';
+      turn = Number(raw[3] ?? 0);
+      px = String(raw[4] ?? '');
+      po = String(raw[5] ?? '');
+      xn = String(raw[6] ?? '');
+      on = String(raw[7] ?? '');
+      xa = String(raw[8] ?? '');
+      oa = String(raw[9] ?? '');
+      effx = String(raw[10] ?? '0');
+      effo = String(raw[11] ?? '0');
+      selx = String(raw[12] ?? '');
+      selo = String(raw[13] ?? '');
+      claim = String(raw[14] ?? '0');
+      claimAmount = String(raw[15] ?? '0');
+      claimWinnerRole = String(raw[16] ?? '');
+      claimExpiresAt = String(raw[17] ?? '');
+    } else {
+      const vals: any = raw;
+      b = String(vals.b ?? '---------');
+      next = String(vals.n ?? 'X') as 'X'|'O';
+      w = String(vals.w ?? '-') as '-'|'X'|'O'|'D';
+      turn = Number(vals.t ?? 0);
+      px = String(vals.x ?? '');
+      po = String(vals.o ?? '');
+      xn = String(vals.xn ?? '');
+      on = String(vals.on ?? '');
+      xa = String(vals.xa ?? '');
+      oa = String(vals.oa ?? '');
+      effx = String(vals.effx ?? '0');
+      effo = String(vals.effo ?? '0');
+      selx = String(vals.selx ?? '');
+      selo = String(vals.selo ?? '');
+      claim = String(vals.claim ?? '0');
+      claimAmount = String(vals.claimAmount ?? '0');
+      claimWinnerRole = String(vals.claimWinnerRole ?? '');
+      claimExpiresAt = String(vals.claimExpiresAt ?? '');
+    }
 
     const state = {
       board: boardStringToArray(b),
@@ -58,6 +98,9 @@ export async function GET(req: Request) {
       players: { X: px || null, O: po || null },
       names: { X: (xn || null) as string | null, O: (on || null) as string | null },
       avatars: { X: (xa || null) as string | null, O: (oa || null) as string | null },
+      coinsMode: { X: effx === '1', O: effo === '1' },
+      coinsModePending: { X: selx === 'daddy' && effx !== '1', O: selo === 'daddy' && effo !== '1' },
+      claim: claim === '1' ? { amount: Number(claimAmount || '0'), winnerRole: claimWinnerRole || null, expiresAt: claimExpiresAt ? Number(claimExpiresAt) : null } : null,
     };
 
     const userRole = userId === px ? 'X' : userId === po ? 'O' : null;

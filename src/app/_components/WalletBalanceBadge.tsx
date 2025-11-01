@@ -3,9 +3,29 @@
 import Link from "next/link";
 import Image from "next/image";
 import { api } from "~/trpc/react";
+import { useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { getChannel } from "~/lib/ably";
 
 export default function WalletBalanceBadge() {
+  const utils = api.useUtils();
   const { data, isLoading } = api.wallet.getBalance.useQuery();
+  const { data: session } = useSession();
+  
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+    let unsub: (() => void) | undefined;
+    (async () => {
+      const ch = await getChannel(`wallet:${userId}`);
+      const onMsg = () => {
+        void utils.wallet.getBalance.invalidate();
+      };
+      ch.subscribe("updated", onMsg);
+      unsub = () => ch.unsubscribe("updated", onMsg);
+    })();
+    return () => unsub?.();
+  }, [session?.user?.id, utils]);
   const balance = data?.balance ?? 0;
 
   return (

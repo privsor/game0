@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -8,8 +8,11 @@ import { getChannel } from "~/lib/ably";
 import { Board } from "./_components/Board";
 import type { Cell } from "./_components/Board";
 import { JoinPanel } from "./_components/JoinPanel";
+
 import { signIn, useSession } from "next-auth/react";
+import { api } from "~/trpc/react";
 import Image from "next/image";
+import { PostGameClaimModal } from "./_components/PostGameClaimModal";
 
 type GameState = {
   board: Cell[]; // 9 cells
@@ -18,6 +21,9 @@ type GameState = {
   players?: { X: string | null; O: string | null };
   names?: { X: string | null; O: string | null };
   avatars?: { X: string | null; O: string | null };
+  coinsMode?: { X: boolean; O: boolean };
+  coinsModePending?: { X: boolean; O: boolean };
+  claim?: { amount: number; winnerRole: 'X'|'O'|null; expiresAt: number | null } | null;
 };
 
 type Role = "X" | "O";
@@ -77,6 +83,10 @@ function initialState(): GameState {
 
 export default function GameClient() {
   const { data: session } = useSession();
+  // Wallet balance to gate Daddy Mode selection (requires auth and >=1 coin)
+  const { data: balData } = api.wallet.getBalance.useQuery(undefined, { enabled: !!session?.user });
+  const myBalance = balData?.balance ?? 0;
+  const canSelectDaddy = !!session?.user && myBalance >= 1;
   const router = useRouter();
   const search = useSearchParams();
   const initialRoom = (search?.get("room") || "").toUpperCase();
@@ -88,6 +98,7 @@ export default function GameClient() {
   const [peers, setPeers] = useState(0);
   const [showJoin, setShowJoin] = useState(false);
   const [joinName, setJoinName] = useState("");
+  const [joinMode, setJoinMode] = useState<'daddy'|'free'>('free');
   const socialCallbackUrl = `/tictactoe?room=${roomCode}`;
   const joinPromptedRef = useRef(false);
   const [joining, setJoining] = useState(false);
@@ -97,6 +108,7 @@ export default function GameClient() {
   const [shareDone, setShareDone] = useState<null | 'copied' | 'shared'>(null);
   // Tooltip for invite button when only Player 1 is present
   const [showInviteHint, setShowInviteHint] = useState(false);
+  const [showClaim, setShowClaim] = useState(false); // retained for onClose, but open is derived
   // Track peers count locally to avoid presence.get on every presence event
   const peersCountRef = useRef(0);
   // Refs for values used inside effects without causing re-subscribe churn
@@ -146,13 +158,16 @@ export default function GameClient() {
     if (!channelName || !userId) return;
 
     let unsub: (() => void) | null = null;
+    const controller = new AbortController();
 
     (async () => {
       // Fetch current state and role from server
       try {
-        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`, { cache: 'no-store' });
+        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`, { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
+          // eslint-disable-next-line no-console
+          console.log('[TTT] tick state claim', data?.state?.claim, 'winner', data?.state?.winner);
           if (data.ok) {
             setState({
               board: data.state.board,
@@ -160,6 +175,10 @@ export default function GameClient() {
               winner: data.state.winner ?? null,
               players: data.state.players ?? { X: null, O: null },
               names: data.state.names ?? { X: null, O: null },
+              avatars: data.state.avatars ?? { X: null, O: null },
+              coinsMode: data.state.coinsMode ?? { X: false, O: false },
+              coinsModePending: data.state.coinsModePending ?? { X: false, O: false },
+              claim: data.state.claim ?? null,
             });
             setRole(data.userRole);
             // Decide if we should prompt to join
@@ -213,6 +232,8 @@ export default function GameClient() {
         const data = msg.data as WireEvent;
         if (!data) return;
         if (data.type === "state") {
+          // eslint-disable-next-line no-console
+          console.log('[TTT] ably state claim', data.state?.claim, 'winner', data.state?.winner);
           const incoming = {
             board: data.state.board,
             next: data.state.next,
@@ -220,6 +241,9 @@ export default function GameClient() {
             players: data.state.players ?? { X: null, O: null },
             names: data.state.names ?? { X: null, O: null },
             avatars: data.state.avatars ?? { X: null, O: null },
+            coinsMode: data.state.coinsMode ?? { X: false, O: false },
+            coinsModePending: data.state.coinsModePending ?? { X: false, O: false },
+            claim: data.state.claim ?? null,
           } as GameState;
           setState((prev) => {
             // Shallow, targeted equality checks to avoid unnecessary renders
@@ -272,9 +296,10 @@ export default function GameClient() {
     })();
 
     return () => {
+      controller.abort();
       unsub?.();
     };
-  }, [channelName]);
+  }, [channelName, roomCode, userId]);
 
   useEffect(() => {
     if (channelName && role) {
@@ -308,6 +333,8 @@ export default function GameClient() {
           { signal: controller.signal, cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
+          // eslint-disable-next-line no-console
+          console.log('[TTT] tick state claim', data?.state?.claim, 'winner', data?.state?.winner);
           if (data?.ok) {
             setState((prev) => {
               const incoming = {
@@ -316,13 +343,21 @@ export default function GameClient() {
                 winner: data.state.winner ?? null,
                 players: data.state.players ?? { X: null, O: null },
                 names: data.state.names ?? { X: null, O: null },
+                avatars: data.state.avatars ?? { X: null, O: null },
+                coinsMode: data.state.coinsMode ?? { X: false, O: false },
+                coinsModePending: data.state.coinsModePending ?? { X: false, O: false },
               } as GameState;
               const sameBoard = prev.board.length === incoming.board.length && prev.board.every((v, i) => v === incoming.board[i]);
               const sameNext = prev.next === incoming.next;
               const sameWinner = prev.winner === incoming.winner;
               const samePlayers = (prev.players?.X ?? null) === (incoming.players?.X ?? null) && (prev.players?.O ?? null) === (incoming.players?.O ?? null);
               const sameNames = (prev.names?.X ?? null) === (incoming.names?.X ?? null) && (prev.names?.O ?? null) === (incoming.names?.O ?? null);
-              if (sameBoard && sameNext && sameWinner && samePlayers && sameNames) return prev;
+              const sameAvatars = (prev.avatars?.X ?? null) === (incoming.avatars?.X ?? null) && (prev.avatars?.O ?? null) === (incoming.avatars?.O ?? null);
+              const sameCoins = (prev.coinsMode?.X ?? false) === (incoming.coinsMode?.X ?? false)
+                && (prev.coinsMode?.O ?? false) === (incoming.coinsMode?.O ?? false)
+                && (prev.coinsModePending?.X ?? false) === (incoming.coinsModePending?.X ?? false)
+                && (prev.coinsModePending?.O ?? false) === (incoming.coinsModePending?.O ?? false);
+              if (sameBoard && sameNext && sameWinner && samePlayers && sameNames && sameAvatars && sameCoins) return prev;
               return incoming;
             });
             if (data.state.players?.X && data.state.players?.O) {
@@ -340,6 +375,133 @@ export default function GameClient() {
       controller.abort();
     };
   }, [showInvite]);
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[TTT] mode flags', {
+      coinsMode: state.coinsMode,
+      coinsModePending: state.coinsModePending,
+      players: state.players,
+      names: state.names,
+      avatars: state.avatars,
+    });
+  }, [state.coinsMode?.X, state.coinsMode?.O, state.coinsModePending?.X, state.coinsModePending?.O]);
+
+  // Log avatar changes explicitly
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[TTT] avatars', state.avatars, state.coinsModePending);
+  }, [state.avatars?.X, state.avatars?.O]);
+
+  // Log claim changes explicitly
+
+  // Fallback: if game ended but claim is missing, refetch state once to hydrate claim
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      if (!state.winner || state.claim || !roomCode) return;
+      try {
+        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (aborted) return;
+        if (data?.ok && data.state?.claim) {
+          setState((prev) => ({ ...prev, claim: data.state.claim } as any));
+        }
+      } catch {}
+    })();
+    return () => { aborted = true; };
+  }, [state.winner, state.claim, roomCode, userId]);
+
+  // Derive modal open directly from state to avoid races
+  const claimOpen = useMemo(() => {
+    if (!state.winner) return false;
+    const c = state.claim;
+    if (!c || !c.amount) return false;
+    if (!session?.user) return true;
+    return role === c.winnerRole;
+  }, [state.winner, state.claim?.amount, state.claim?.winnerRole, session?.user, role]);
+
+  // Post-auth intent processor: claim -> authping -> rejoin seat
+  useEffect(() => {
+    (async () => {
+      if (!session?.user) return;
+      let raw: string | null = null;
+      try { raw = localStorage.getItem('ttt-intent'); } catch {}
+      if (!raw) return;
+      let intent: any = null;
+      try { intent = JSON.parse(raw); } catch { intent = null; }
+      if (!intent || intent.intent !== 'claim_and_rejoin') return;
+      if (!roomCode || intent.room !== roomCode) return;
+      // 1) Settle claim, ignore errors
+      try {
+        await fetch('/api/tictactoe/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room: roomCode }) });
+      } catch {}
+      // 2) Auth ping to promote half->full and charge idempotently
+      try {
+        await fetch('/api/tictactoe/authping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room: roomCode }) });
+      } catch {}
+      // 3) Attempt rejoin to preferredRole
+      const preferredRole = (intent.role === 'X' || intent.role === 'O') ? intent.role : 'auto';
+      try {
+        const res = await fetch('/api/tictactoe/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room: roomCode, userId, name: joinName || session?.user?.name || 'Player', preferredRole }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok) {
+            setState((prev) => ({
+              board: data.state.board,
+              next: data.state.next,
+              winner: data.state.winner ?? null,
+              players: data.state.players ?? prev.players ?? { X: null, O: null },
+              names: data.state.names ?? prev.names ?? { X: null, O: null },
+              avatars: data.state.avatars ?? prev.avatars ?? { X: null, O: null },
+              coinsMode: data.state.coinsMode ?? prev.coinsMode ?? { X: false, O: false },
+              coinsModePending: data.state.coinsModePending ?? prev.coinsModePending ?? { X: false, O: false },
+              claim: data.state.claim ?? prev.claim ?? null,
+            } as GameState));
+            setRole(data.userRole);
+          }
+        }
+      } catch {}
+      // 4) Clear intent
+      try { localStorage.removeItem('ttt-intent'); } catch {}
+    })();
+  }, [session?.user, roomCode, userId, joinName]);
+
+  // Log join mode selection changes
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[TTT] joinMode selected', joinMode);
+  }, [joinMode]);
+
+  // Ensure join modal shows freshest state immediately
+  useEffect(() => {
+    if (!showJoin) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tictactoe/state?room=${roomCode}&userId=${userId}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.ok) {
+            setState((prev) => ({
+              board: data.state.board,
+              next: data.state.next,
+              winner: data.state.winner ?? null,
+              players: data.state.players ?? prev.players ?? { X: null, O: null },
+              names: data.state.names ?? prev.names ?? { X: null, O: null },
+              avatars: data.state.avatars ?? prev.avatars ?? { X: null, O: null },
+              coinsMode: data.state.coinsMode ?? prev.coinsMode ?? { X: false, O: false },
+              coinsModePending: data.state.coinsModePending ?? prev.coinsModePending ?? { X: false, O: false },
+            } as GameState));
+          }
+        }
+      } catch {}
+    })();
+  }, [showJoin, roomCode, userId]);
 
   const startNewRoom = useCallback(() => {
     const code = nanoid(6).toUpperCase();
@@ -406,13 +568,18 @@ export default function GameClient() {
     // Close modal immediately to reduce perceived latency
     setShowJoin(false);
     try {
+      const payload = { room: roomCode, userId, name: joinName, preferredRole, mode: joinMode };
+      // eslint-disable-next-line no-console
+      console.log('[TTT] join: sending', payload);
       const res = await fetch('/api/tictactoe/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room: roomCode, userId, name: joinName, preferredRole }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const data = await res.json();
+        // eslint-disable-next-line no-console
+        console.log('[TTT] join: response', data);
         if (data.ok) {
           setState(data.state);
           setRole(data.userRole);
@@ -428,10 +595,17 @@ export default function GameClient() {
     } finally {
       setJoining(false);
     }
-  }, [joinName, joining, roomCode, userId]);
+  }, [joinName, joinMode, joining, roomCode, userId]);
 
   return (
     <main className="flex min-h-screen md:fixed md:inset-0 md:h-screen md:overflow-hidden flex-col bg-black text-white px-4 py-6 md:p-0">
+      <PostGameClaimModal
+        open={claimOpen}
+        onClose={() => setShowClaim(false)}
+        room={roomCode}
+        claim={state.claim ?? null}
+        opponentName={role === 'X' ? state.names?.O : role === 'O' ? state.names?.X : (state.names?.X || state.names?.O || null)}
+      />
       <div className="w-full h-full flex items-center justify-center">
         <div className="w-full max-w-xl">
         <h1 className="text-center text-2xl md:text-3xl font-extrabold tracking-tight mb-3 md:mb-2">Tic Tac Toe</h1>
@@ -549,7 +723,20 @@ export default function GameClient() {
                     <Image src={state.avatars.X} alt="X avatar" width={16} height={16} />
                   </span>
                 ) : null}
-                <span className="font-semibold">{state.names?.X || '—'}</span>
+                <span className="font-semibold inline-flex items-center gap-1">
+                  {state.names?.X || '—'}
+                  {state.coinsMode?.X ? (
+                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-2 py-0.5 text-[10px] text-amber-200">
+                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                      Daddy mode
+                    </span>
+                  ) : state.coinsModePending?.X ? (
+                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-2 py-0.5 text-[10px] text-amber-200/80">
+                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                      1/2 Daddy mode
+                    </span>
+                  ) : null}
+                </span>
               </span>
               <span className="text-white/40">·</span>
               <span className="inline-flex items-center gap-1">
@@ -559,7 +746,20 @@ export default function GameClient() {
                     <Image src={state.avatars.O} alt="O avatar" width={16} height={16} />
                   </span>
                 ) : null}
-                <span className="font-semibold">{state.names?.O || '—'}</span>
+                <span className="font-semibold inline-flex items-center gap-1">
+                  {state.names?.O || '—'}
+                  {state.coinsMode?.O ? (
+                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-2 py-0.5 text-[10px] text-amber-200">
+                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                      Daddy mode
+                    </span>
+                  ) : state.coinsModePending?.O ? (
+                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-2 py-0.5 text-[10px] text-amber-200/80">
+                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                      1/2 Daddy mode
+                    </span>
+                  ) : null}
+                </span>
               </span>
             </div>
 
@@ -596,7 +796,20 @@ export default function GameClient() {
                       <Image src={state.avatars.O} alt="Your avatar" width={16} height={16} />
                     </span>
                   ) : null}
-                  {role === 'X' ? (state.names?.X || '') : (state.names?.O || '')}
+                  <span className="inline-flex items-center gap-1">
+                    {role === 'X' ? (state.names?.X || '') : (state.names?.O || '')}
+                    {(role === 'X' ? state.coinsMode?.X : state.coinsMode?.O) ? (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-2 py-0.5 text-[10px] text-amber-200">
+                        <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                        Daddy mode
+                      </span>
+                    ) : (role === 'X' ? state.coinsModePending?.X : state.coinsModePending?.O) ? (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-2 py-0.5 text-[10px] text-amber-200/80">
+                        <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                        1/2 Daddy mode
+                      </span>
+                    ) : null}
+                  </span>
                 )</span>
               ) : null}
               <span className="mx-2 text-white/40">·</span>
@@ -605,6 +818,8 @@ export default function GameClient() {
                 {state.next === 'X' ? (state.names?.X || 'Player 1') : (state.names?.O || 'Player 2')}
               )</span>
             </div>
+
+            {/* DaddyCoins Mode toggle removed by product decision */}
 
             <div className="min-h-[2.25rem] text-center">
               {state.winner ? (
@@ -725,7 +940,6 @@ export default function GameClient() {
                         ) : (
                           <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
                         )}
-                        <span className="font-medium">{state.names?.X || "—"}</span>
                       </span>
                       <span className="inline-flex items-center gap-2">
                         <span className="text-white/50">O</span>
@@ -736,7 +950,9 @@ export default function GameClient() {
                         ) : (
                           <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
                         )}
-                        <span className="font-medium">{state.names?.O || "—"}</span>
+                        <span className="font-medium inline-flex items-center gap-1">
+                          {state.names?.O || "—"}
+                        </span>
                       </span>
                     </div>
 
@@ -788,6 +1004,31 @@ export default function GameClient() {
                       className="w-full rounded-lg bg-white/10 px-4 py-2 outline-none mb-4"
                       disabled={!!session?.user}
                     />
+                    {/* Mode selection cards */}
+                    <div className="mb-4 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setJoinMode('free')}
+                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='free' ? 'border-white bg-white text-black' : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10'}`}
+                      >
+                        <div className="text-sm font-semibold">Free Mode</div>
+                        <div className="text-xs text-white/60">Play for fun. No coins.</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => canSelectDaddy && setJoinMode('daddy')}
+                        disabled={!canSelectDaddy}
+                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='daddy' ? 'border-amber-300 bg-amber-200 text-black' : 'border-amber-300/30 bg-amber-200/10 text-amber-200'} ${!canSelectDaddy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-200/20'}`}
+                        title={!canSelectDaddy ? (!session?.user ? 'Sign in to use Daddy Mode' : 'Need at least 1 DaddyCoin') : 'Daddy Mode (costs 1 coin when an authenticated opponent joins)'}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={14} height={14} /> Daddy Mode
+                        </div>
+                        <div className="text-[11px] mt-1 opacity-80">
+                          Costs 1 DaddyCoin when a signed-in opponent joins. Winner rewards: +2 (vs free) / +3 (vs daddy).
+                        </div>
+                      </button>
+                    </div>
                     <div className="flex gap-3 justify-end">
                       <button
                         disabled={joining}
@@ -818,7 +1059,19 @@ export default function GameClient() {
                         ) : (
                           <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
                         )}
-                        <span className="font-medium">{state.names?.X || "—"}</span>
+                        <span className="font-medium">{state.names?.X || "—"}
+                          {state.coinsMode?.X ? (
+                            <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                              <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                              Daddy mode
+                            </span>
+                          ) : state.coinsModePending?.X ? (
+                            <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-1.5 py-0.5 text-[10px] text-amber-200/80">
+                              <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
+                              &frac12; Daddy mode
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
                       <span className="inline-flex items-center gap-2">
                         <span className="text-white/50">O</span>
@@ -844,8 +1097,36 @@ export default function GameClient() {
                         <span className="font-semibold">{session.user.name || "Player"}</span>.
                         <span>Going to play with <span className="font-semibold">{xn}</span></span>
                       </p>
-                    ) : (
-                      <>
+                    ) : null}
+
+                    {/* Mode selection cards for Player 2 (visible in both auth and guest flows) */}
+                    <div className="mb-4 grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setJoinMode('free')}
+                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='free' ? 'border-white bg-white text-black' : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10'}`}
+                      >
+                        <div className="text-sm font-semibold">Free Mode</div>
+                        <div className="text-xs text-white/60">Play for fun. No coins.</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => canSelectDaddy && setJoinMode('daddy')}
+                        disabled={!canSelectDaddy}
+                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='daddy' ? 'border-amber-300 bg-amber-200 text-black' : 'border-amber-300/30 bg-amber-200/10 text-amber-200'} ${!canSelectDaddy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-200/20'}`}
+                        title={!canSelectDaddy ? (!session?.user ? 'Sign in to use Daddy Mode' : 'Need at least 1 DaddyCoin') : 'Daddy Mode (costs 1 coin when an authenticated opponent joins)'}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={14} height={14} /> Daddy Mode
+                        </div>
+                        <div className="text-[11px] mt-1 opacity-80">
+                          Costs 1 DaddyCoin when a signed-in opponent joins. Winner rewards: +2 (vs free) / +3 (vs daddy).
+                        </div>
+                      </button>
+                    </div>
+
+                    {!session?.user ? (
+                      <> 
                         <p className="text-white/70 mb-4">Join with an account or continue as guest. Going to play with <span className="font-semibold">{xn}</span></p>
                         <div className="mb-4 grid gap-2">
                           <button
@@ -853,14 +1134,14 @@ export default function GameClient() {
                             className="flex items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2 font-medium text-white hover:opacity-90"
                           >
                             <Image src="icons/discord.svg" alt="Discord" width={20} height={20} className="invert brightness-0" />
-                            Continue with Discord
+                            Join with Discord
                           </button>
                           <button
                             onClick={() => signIn("google", { callbackUrl: socialCallbackUrl })}
                             className="flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 font-medium text-black hover:bg-white/90"
                           >
                             <Image src="icons/google.svg" alt="Google" width={20} height={20} />
-                            Continue with Google
+                            Join with Google
                           </button>
                         </div>
                         <div className="my-3 flex items-center gap-3 text-xs text-white/50">
@@ -869,6 +1150,10 @@ export default function GameClient() {
                           <div className="h-px flex-1 bg-white/10" />
                         </div>
                         <label className="text-white/70 text-sm">Your player name</label>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-white/70 mb-3">Enter your name. You will play as O.</p>
                       </>
                     )}
                     <input

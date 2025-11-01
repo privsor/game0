@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "~/env";
 import { auth } from "~/server/auth";
-import { db } from "~/server/db";
-import { coinPackages } from "~/server/db/schema";
-import { and, eq } from "drizzle-orm";
 
 // Create Razorpay Order
 export async function POST(req: NextRequest) {
@@ -13,30 +10,31 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { coins } = (await req.json()) as {
+    const { coins, currency } = (await req.json()) as {
       coins: number; // number of DaddyCoins to credit
+      currency: "INR" | "GBP";
     };
 
     if (![10, 30, 100, 200].includes(coins)) {
       return NextResponse.json({ error: "Invalid package" }, { status: 400 });
     }
 
-    // Determine currency from IP headers (Vercel) or default to INR
-    const country = req.headers.get("x-vercel-ip-country") || "";
-    const currency: "INR" | "GBP" = country === "IN" ? "INR" : "GBP";
-
-    // Lookup package from DB
-    const pkg = (
-      await db
-        .select()
-        .from(coinPackages)
-        .where(and(eq(coinPackages.currency, currency), eq(coinPackages.coins, coins), eq(coinPackages.active, 1)))
-        .limit(1)
-    )[0];
-    if (!pkg) {
-      return NextResponse.json({ error: "PACKAGE_NOT_AVAILABLE" }, { status: 400 });
+    // Determine amount in minor units
+    let amountMinor = 0; // paise for INR, pence for GBP
+    if (currency === "INR") {
+      amountMinor =
+        coins === 10 ? 10 * 100 : // Rs 10
+        coins === 30 ? 20 * 100 : // Rs 20 (discount)
+        coins === 100 ? 50 * 100 : // Rs 50
+        100 * 100; // Rs 100 for 200 coins
+    } else {
+      // GBP
+      amountMinor =
+        coins === 10 ? 10 : // 10 pence
+        coins === 30 ? 20 : // 20 pence (discount)
+        coins === 100 ? 50 : // 50 pence
+        100; // 1 pound (100 pence) for 200 coins
     }
-    const amountMinor = pkg.amountMinor;
 
     const basicAuth = Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString("base64");
 
@@ -52,7 +50,6 @@ export async function POST(req: NextRequest) {
         notes: {
           userId: session.user.id,
           coins,
-          currency,
         },
       }),
     });

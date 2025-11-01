@@ -4,20 +4,3 @@
 	--font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
 		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
-
-/* Diagonal strike-through for showing original price cuts */
-.diagonal-strike {
-  position: relative;
-  display: inline-block;
-  color: rgba(255, 255, 255, 0.5);
-}
-.diagonal-strike::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  border-top: 2px solid rgba(255, 255, 255, 0.6);
-  transform: rotate(-12deg);
-  transform-origin: center;
-}

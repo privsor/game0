@@ -1,26 +1,16 @@
 import { z } from "zod";
-import { asc, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
-import { createTRPCRouter, protectedProcedure, publicProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import {
   wallets,
   walletTransactions,
   gifts,
   purchases,
-  coinPackages,
 } from "~/server/db/schema";
+import { publishWalletUpdate } from "~/server/lib/ablyServer";
 
 export const walletRouter = createTRPCRouter({
-  listCoinPackages: publicProcedure
-    .input(z.object({ currency: z.enum(["INR", "GBP"]) }))
-    .query(async ({ ctx, input }) => {
-      const rows = await ctx.db
-        .select()
-        .from(coinPackages)
-        .where(eq(coinPackages.currency, input.currency))
-        .orderBy(asc(coinPackages.coins));
-      return rows.filter((r) => r.active === 1);
-    }),
   getBalance: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
 
@@ -58,7 +48,7 @@ export const walletRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      await ctx.db.transaction(async (tx) => {
+      const newBalance = await ctx.db.transaction(async (tx) => {
         const current = (
           await tx
             .select()
@@ -67,14 +57,14 @@ export const walletRouter = createTRPCRouter({
             .limit(1)
         )[0];
 
-        const newBalance = (current?.balance ?? 0) + input.amount;
+        const nextBalance = (current?.balance ?? 0) + input.amount;
 
         if (!current) {
-          await tx.insert(wallets).values({ userId, balance: newBalance });
+          await tx.insert(wallets).values({ userId, balance: nextBalance });
         } else {
           await tx
             .update(wallets)
-            .set({ balance: newBalance })
+            .set({ balance: nextBalance })
             .where(eq(wallets.userId, userId));
         }
 
@@ -84,7 +74,16 @@ export const walletRouter = createTRPCRouter({
           type: "earn",
           reason: input.reason ?? "game_win",
         });
+
+        return nextBalance;
       });
+
+      // Fire-and-forget Ably publish (do not block mutation)
+      publishWalletUpdate(userId, {
+        balance: newBalance,
+        delta: input.amount,
+        reason: input.reason ?? "game_win",
+      }).catch(() => {});
 
       return { ok: true } as const;
     }),
@@ -143,6 +142,12 @@ export const walletRouter = createTRPCRouter({
 
         return { newBalance, purchase: inserted[0] } as const;
       });
+
+      // Notify client(s) about updated balance via Ably
+      publishWalletUpdate(userId, {
+        balance: result.newBalance,
+        reason: `purchase:g${result.purchase.giftId}`,
+      }).catch(() => {});
 
       return result;
     }),

@@ -218,27 +218,3 @@ export const purchasesRelations = relations(purchases, ({ one }) => ({
 	user: one(users, { fields: [purchases.userId], references: [users.id] }),
 	gift: one(gifts, { fields: [purchases.giftId], references: [gifts.id] }),
 }));
-
-// Coin packages for purchase (admin-managed)
-export const coinPackages = createTable(
-	"coin_package",
-	(d) => ({
-		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
-		currency: d.varchar({ length: 8 }).notNull(), // "INR" | "GBP"
-		coins: d.integer().notNull(),
-		amountMinor: d.integer().notNull(), // paise for INR, pence for GBP
-		active: d.integer().notNull().default(1),
-		createdAt: d
-			.timestamp({ withTimezone: true })
-			.default(sql`CURRENT_TIMESTAMP`)
-			.notNull(),
-		updatedAt: d
-			.timestamp({ withTimezone: true })
-			.default(sql`CURRENT_TIMESTAMP`)
-			.$onUpdate(() => new Date()),
-	}),
-	(t) => [
-		index("coin_pkg_currency_idx").on(t.currency),
-		index("coin_pkg_active_idx").on(t.active),
-	],
-);

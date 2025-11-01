@@ -25,7 +25,6 @@ export default async function Home() {
 						<p className="text-center text-xl">
 							{session && <span>Logged in as {session.user?.name}</span>}
 						</p>
-						<AuthTrigger signedIn={!!session} callbackUrl="/tictactoe" />
 					</div>
 				</div>
 			</main>

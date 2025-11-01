@@ -3,6 +3,9 @@ import Ably from "ably";
 import { getRedis } from "~/server/redis";
 import { env } from "~/env";
 import { auth } from "~/server/auth";
+import { db } from "~/server/db";
+import { wallets, walletTransactions } from "~/server/db/schema";
+import { eq } from "drizzle-orm";
 
 // Redis state layout (hash at key ttt:room:{ROOM})
 // b: 9-char string ("-" empty)
@@ -125,12 +128,39 @@ export async function POST(req: Request) {
     const po = (res[6] ?? '') as string;
 
     // Read names and avatars if present
-    const nv = await (redis as any).hmget(key, 'xn', 'on', 'xa', 'oa');
-    const xn = (nv?.xn ?? '') as string;
-    const on = (nv?.on ?? '') as string;
-    const xa = (nv?.xa ?? '') as string;
-    const oa = (nv?.oa ?? '') as string;
+    const nv = await (redis as any).hmget(key, 'xn', 'on', 'xa', 'oa', 'effx', 'effo', 'rwd', 'selx', 'selo', 'authx', 'autho');
+    let xn = '' as string, on = '' as string, xa = '' as string, oa = '' as string;
+    let effx = '0' as string, effo = '0' as string, rwd = '0' as string;
+    let selx = '' as string, selo = '' as string;
+    let authx = '0' as string, autho = '0' as string;
+    if (Array.isArray(nv)) {
+      // Upstash may return an array in order of fields
+      xn = String(nv[0] ?? '');
+      on = String(nv[1] ?? '');
+      xa = String(nv[2] ?? '');
+      oa = String(nv[3] ?? '');
+      effx = String(nv[4] ?? '0');
+      effo = String(nv[5] ?? '0');
+      rwd = String(nv[6] ?? '0');
+      selx = String(nv[7] ?? '');
+      selo = String(nv[8] ?? '');
+      authx = String(nv[9] ?? '0');
+      autho = String(nv[10] ?? '0');
+    } else if (nv && typeof nv === 'object') {
+      xn = String((nv as any).xn ?? '');
+      on = String((nv as any).on ?? '');
+      xa = String((nv as any).xa ?? '');
+      oa = String((nv as any).oa ?? '');
+      effx = String((nv as any).effx ?? '0');
+      effo = String((nv as any).effo ?? '0');
+      rwd = String((nv as any).rwd ?? '0');
+      selx = String((nv as any).selx ?? '');
+      selo = String((nv as any).selo ?? '');
+      authx = String((nv as any).authx ?? '0');
+      autho = String((nv as any).autho ?? '0');
+    }
 
+    let claimObj: { amount: number; winnerRole: 'X'|'O'; expiresAt: number } | null = null;
     const state = {
       board: boardStringToArray(b),
       next,
@@ -139,14 +169,102 @@ export async function POST(req: Request) {
       players: { X: px || null, O: po || null },
       names: { X: (xn || null) as string | null, O: (on || null) as string | null },
       avatars: { X: (xa || null) as string | null, O: (oa || null) as string | null },
+      coinsMode: { X: effx === '1', O: effo === '1' },
+      coinsModePending: { X: selx === 'daddy' && effx !== '1', O: selo === 'daddy' && effo !== '1' },
+      claim: null as any,
     };
 
-    // Publish authoritative state to Ably
-    const rest = new Ably.Rest(env.ABLY_API_KEY);
-    await rest.channels.get(`room-${room}`).publish('state', { type: 'state', state });
+    // We'll publish after reward/claim logic to include any claim in state
 
     // Determine user's role for client
     const userRole = userId === px ? 'X' : userId === po ? 'O' : null;
+
+    // On game conclusion, distribute DaddyCoins based on coins mode flags (idempotent)
+    const winnerSymbol = state.winner === 'Draw' ? 'D' : state.winner; // 'X' | 'O' | 'D' | null
+    if (winnerSymbol && winnerSymbol !== 'D') {
+      try {
+        // check and set reward flag atomically-ish
+        if (rwd !== '1') {
+          // compute award from effective daddy mode snapshot
+          const xOn = effx === '1';
+          const oOn = effo === '1';
+          let award = 0;
+          if (winnerSymbol === 'X') {
+            if (xOn && oOn) award = 3; else if (xOn) award = 2; else if (oOn) award = 1; else award = 0;
+          } else if (winnerSymbol === 'O') {
+            if (xOn && oOn) award = 3; else if (oOn) award = 2; else if (xOn) award = 1; else award = 0;
+          }
+
+          console.log('[MOVE:end]', { room, winnerSymbol, effx, effo, selx, selo, authx, autho, award });
+          if (award > 0) {
+            const winnerUserId = winnerSymbol === 'X' ? px : po;
+            const winnerAuthed = winnerSymbol === 'X' ? (authx === '1') : (autho === '1');
+            if (winnerUserId && winnerAuthed) {
+              await db.transaction(async (tx) => {
+                const current = (
+                  await tx.select().from(wallets).where(eq(wallets.userId, winnerUserId)).limit(1)
+                )[0];
+                const newBal = (current?.balance ?? 0) + award;
+                if (!current) {
+                  await tx.insert(wallets).values({ userId: winnerUserId, balance: newBal });
+                } else {
+                  await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, winnerUserId));
+                }
+                await tx.insert(walletTransactions).values({
+                  userId: winnerUserId,
+                  amount: award,
+                  type: 'earn',
+                  reason: `ttt:win:${room}:${winnerSymbol}:${turn}`,
+                });
+              });
+            } else {
+              // Winner unauthenticated: create a pending claim tied to the winner's ephemeral seat id
+              const claimExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h
+              const claimWinnerRole = winnerSymbol as 'X'|'O';
+              const claimEphemeralId = winnerSymbol === 'X' ? px : po; // px/po are seat ids (may be empty if spectator won, but here winner is seat)
+              await (redis as any).hmset(key, {
+                claim: '1',
+                claimAmount: String(award),
+                claimWinnerRole,
+                claimEphemeralId: claimEphemeralId || '',
+                claimExpiresAt: String(claimExpiresAt),
+              });
+              console.log('[MOVE:claim-created]', { room, winnerSymbol, amount: award, claimExpiresAt });
+              claimObj = { amount: award, winnerRole: claimWinnerRole, expiresAt: claimExpiresAt };
+            }
+          }
+          // If no award due to ineffective half-daddy, but exactly one pending selection exists and winner is unauth, create +1 claim
+          if (award === 0) {
+            const pendingX = selx === 'daddy' && effx !== '1';
+            const pendingO = selo === 'daddy' && effo !== '1';
+            const exactlyOnePending = (pendingX ? 1 : 0) + (pendingO ? 1 : 0) === 1;
+            const winnerAuthed = winnerSymbol === 'X' ? (authx === '1') : (autho === '1');
+            if (exactlyOnePending && !winnerAuthed) {
+              const claimExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h
+              const claimWinnerRole = winnerSymbol as 'X'|'O';
+              await (redis as any).hmset(key, {
+                claim: '1',
+                claimAmount: '1',
+                claimWinnerRole,
+                claimEphemeralId: '',
+                claimExpiresAt: String(claimExpiresAt),
+              });
+              console.log('[MOVE:claim-created]', { room, winnerSymbol, amount: 1, claimExpiresAt });
+              claimObj = { amount: 1, winnerRole: claimWinnerRole, expiresAt: claimExpiresAt };
+            }
+          }
+          // Mark rewards distributed
+          await (redis as any).hset(key, 'rwd', '1');
+          await (redis as any).pexpire(key, 24 * 60 * 60 * 1000);
+        }
+      } catch (e) {
+        console.error('Error distributing DaddyCoins rewards', e);
+      }
+    }
+    if (claimObj) (state as any).claim = claimObj;
+    // Publish authoritative state to Ably (after computing claim/reward)
+    const rest = new Ably.Rest(env.ABLY_API_KEY);
+    await rest.channels.get(`room-${room}`).publish('state', { type: 'state', state });
     return NextResponse.json({ ok: true, state, userRole });
   } catch (err) {
     console.error('/api/tictactoe/move error', err);

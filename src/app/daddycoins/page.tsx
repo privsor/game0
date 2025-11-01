@@ -145,10 +145,6 @@ export default function DaddyCoinsPage() {
           <p className="text-white/60">Top up your balance to play and win more gifts.</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-right">
-            <div className="text-xs uppercase text-white/50">Balance</div>
-            <div className="text-2xl font-bold">{balance}</div>
-          </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
             <label className="mr-2 text-white/60">Region</label>
             <select

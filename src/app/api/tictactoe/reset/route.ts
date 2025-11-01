@@ -19,11 +19,13 @@ export async function POST(req: Request) {
     const now = Date.now();
 
     // Only allow reset by a participant (X or O)
-    const vals = await (redis as any).hmget(key, 'x', 'o', 'xn', 'on');
+    const vals = await (redis as any).hmget(key, 'x', 'o', 'xn', 'on', 'cmx', 'cmo');
     const px = (Array.isArray(vals) && vals[0] ? String(vals[0]) : '');
     const po = (Array.isArray(vals) && vals[1] ? String(vals[1]) : '');
     const xn = (Array.isArray(vals) && vals[2] ? String(vals[2]) : '');
     const on = (Array.isArray(vals) && vals[3] ? String(vals[3]) : '');
+    const cmx = (Array.isArray(vals) && vals[4] ? String(vals[4]) : '0');
+    const cmo = (Array.isArray(vals) && vals[5] ? String(vals[5]) : '0');
     if (px && px !== userId && po && po !== userId) {
       return NextResponse.json({ error: 'not-player' }, { status: 403 });
     }
@@ -35,6 +37,8 @@ export async function POST(req: Request) {
       t: 0,
       u: String(now),
     });
+    // Reset charged and rewards flags for a new game, keep coins mode as-is
+    await (redis as any).hmset(key, { cmxd: '0', cmod: '0', rwd: '0' });
     // Keep TTL (do not change)
 
     const state = {
@@ -44,6 +48,7 @@ export async function POST(req: Request) {
       turn: 0,
       players: { X: px || null, O: po || null },
       names: { X: (xn || null) as string | null, O: (on || null) as string | null },
+      coinsMode: { X: cmx === '1', O: cmo === '1' },
     };
 
     const rest = new Ably.Rest(env.ABLY_API_KEY);
