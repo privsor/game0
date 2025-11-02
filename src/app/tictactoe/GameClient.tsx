@@ -8,78 +8,32 @@ import { getChannel } from "~/lib/ably";
 import { Board } from "./_components/Board";
 import type { Cell } from "./_components/Board";
 import { JoinPanel } from "./_components/JoinPanel";
+import { JoinModal } from "./_components/JoinModal";
+import { StatusBadges } from "./_components/StatusBadges";
+import { PlayersSummary } from "./_components/PlayersSummary";
+import { WinnerBanner } from "./_components/WinnerBanner";
+import { InviteModal } from "./_components/InviteModal";
+import { RoomHeaderBar } from "./_components/RoomHeaderBar";
+import { calculateWinner, winningLine, initialState } from "./_utils/game";
+import type { Role, GameState } from "./_types";
+import dynamic from "next/dynamic";
+import { useAblyPresence } from "./_hooks/useAblyPresence";
 
 import { signIn, useSession } from "next-auth/react";
 import { api } from "~/trpc/react";
 import Image from "next/image";
-import { PostGameClaimModal } from "./_components/PostGameClaimModal";
 
-type GameState = {
-  board: Cell[]; // 9 cells
-  next: "X" | "O";
-  winner: "X" | "O" | "Draw" | null;
-  players?: { X: string | null; O: string | null };
-  names?: { X: string | null; O: string | null };
-  avatars?: { X: string | null; O: string | null };
-  coinsMode?: { X: boolean; O: boolean };
-  coinsModePending?: { X: boolean; O: boolean };
-  claim?: { amount: number; winnerRole: 'X'|'O'|null; expiresAt: number | null } | null;
-};
+// Types moved to ./_types
 
-type Role = "X" | "O";
+// Dynamically import heavy/rarely used modal to keep initial bundle smaller
+const PostGameClaimModal = dynamic(() => import("./_components/PostGameClaimModal").then(m => m.PostGameClaimModal), { ssr: false, loading: () => null });
 
 type WireEvent =
   | { type: "state"; state: GameState & { turn?: number; players?: { X: string | null; O: string | null }, names?: { X: string | null; O: string | null }, avatars?: { X: string | null; O: string | null } } };
 
-function calculateWinner(board: Cell[]): GameState["winner"] {
-  const lines: Array<[number, number, number]> = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6],
-  ];
-  for (const [a, b, c] of lines) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return board[a];
-    }
-  }
-  if (board.every(Boolean)) return "Draw";
-  return null;
-}
+// calculateWinner and winningLine moved to ./_utils/game
 
-function winningLine(board: Cell[]): number[] | null {
-  const lines: Array<[number, number, number]> = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6],
-  ];
-  for (const [a, b, c] of lines) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return [a, b, c];
-    }
-  }
-  return null;
-}
-
-function initialState(): GameState {
-  return {
-    board: Array<Cell>(9).fill(null),
-    next: "X",
-    winner: null,
-    players: { X: null, O: null },
-    names: { X: null, O: null },
-    avatars: { X: null, O: null },
-  };
-}
+// initialState moved to ./_utils/game
 
 export default function GameClient() {
   const { data: session } = useSession();
@@ -114,6 +68,16 @@ export default function GameClient() {
   // Refs for values used inside effects without causing re-subscribe churn
   const roomCodeRef = useRef(roomCode);
   const userIdRef = useRef("");
+  // Memoize board highlight to avoid recomputation and prop identity churn
+  const highlight = useMemo(() => (
+    state.winner && state.winner !== 'Draw' ? winningLine(state.board) : null
+  ), [state.winner, state.board]);
+
+  // Presence via hook: compute channel from room
+  const channelName = useMemo(() => roomCode ? `room-${roomCode}` : null, [roomCode]);
+  const { connected: hookConnected, peers: hookPeers } = useAblyPresence(channelName);
+  useEffect(() => { setConnected(hookConnected); }, [hookConnected]);
+  useEffect(() => { setPeers(hookPeers); }, [hookPeers]);
 
   useEffect(() => { roomCodeRef.current = roomCode; }, [roomCode]);
 
@@ -138,8 +102,6 @@ export default function GameClient() {
     const shouldShow = !!roomCode && hasX && !hasO && !showInvite; // hide while invite modal is open
     setShowInviteHint(shouldShow);
   }, [roomCode, state.players?.X, state.players?.O, showInvite]);
-
-  const channelName = useMemo(() => (roomCode ? `room-${roomCode}` : null), [roomCode]);
 
   // Lock page scrolling while this view is active (app-like feel)
   useEffect(() => {
@@ -215,6 +177,8 @@ export default function GameClient() {
       } catch {}
 
       // Attach with rewind=1 to immediately receive last authoritative state
+      // eslint-disable-next-line no-console
+      console.log('[TTT] subscribing to channel', channelName);
       const ch = await getChannel(channelName, { params: { rewind: 1 } });
       // Initialize connection status (getChannel waits until connected, so we may have missed the 'connected' event)
       try { setConnected(ch.client.connection.state === 'connected'); } catch {}
@@ -229,6 +193,8 @@ export default function GameClient() {
       } catch {}
 
       const onMessage = (msg: any) => {
+        // eslint-disable-next-line no-console
+        console.log('[TTT] ably message', { name: msg?.name, data: msg?.data });
         const data = msg.data as WireEvent;
         if (!data) return;
         if (data.type === "state") {
@@ -273,7 +239,7 @@ export default function GameClient() {
         setConnected(st === 'connected');
       };
 
-      ch.subscribe(onMessage);
+      ch.subscribe('state', onMessage);
       ch.presence.subscribe("enter", () => {
         peersCountRef.current = Math.max(0, peersCountRef.current + 1);
         setPeers(peersCountRef.current);
@@ -341,11 +307,11 @@ export default function GameClient() {
                 board: data.state.board,
                 next: data.state.next,
                 winner: data.state.winner ?? null,
-                players: data.state.players ?? { X: null, O: null },
-                names: data.state.names ?? { X: null, O: null },
-                avatars: data.state.avatars ?? { X: null, O: null },
-                coinsMode: data.state.coinsMode ?? { X: false, O: false },
-                coinsModePending: data.state.coinsModePending ?? { X: false, O: false },
+                players: data.state.players ?? prev.players ?? { X: null, O: null },
+                names: data.state.names ?? prev.names ?? { X: null, O: null },
+                avatars: data.state.avatars ?? prev.avatars ?? { X: null, O: null },
+                coinsMode: data.state.coinsMode ?? prev.coinsMode ?? { X: false, O: false },
+                coinsModePending: data.state.coinsModePending ?? prev.coinsModePending ?? { X: false, O: false },
               } as GameState;
               const sameBoard = prev.board.length === incoming.board.length && prev.board.every((v, i) => v === incoming.board[i]);
               const sameNext = prev.next === incoming.next;
@@ -620,154 +586,45 @@ export default function GameClient() {
         ) : (
           <div className="grid gap-2 md:gap-5">
             
-            <div className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 flex flex-wrap md:flex-nowrap items-center justify-between text-white/70 text-sm gap-2 md:gap-4 overflow-x-auto">
-              <div className="text-white/80">
-                Room <span className="ml-2 rounded bg-white/10 px-2 py-0.5 font-mono">{roomCode}</span>
-              </div>
-              <span className="hidden sm:inline">·</span>
-              <span className="inline-flex items-center gap-2">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}
-                  aria-hidden
-                />
-                <span className="sr-only">{connected ? 'Online' : 'Connecting'}</span>
-              </span>
-              <span className="hidden sm:inline">·</span>
-              <span><span className="hidden sm:inline">Online </span>{peers}</span>
-              <span className="hidden sm:inline">·</span>
-              <button
-                onClick={() => {
-                  const url = typeof window !== "undefined" ? window.location.href : "";
-                  navigator.clipboard?.writeText(url).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  }).catch(() => {});
-                }}
-                className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
-              >
-                {copied ? 'Copied!' : (<><span className="sm:hidden">Copy link</span><span className="hidden sm:inline">Copy link</span></>)}
-              </button>
-              <Tooltip.Provider disableHoverableContent>
-                <Tooltip.Root open={showInviteHint}>
-                  <Tooltip.Trigger asChild>
-                    <button
-                      onClick={() => setShowInvite(true)}
-                      className="rounded bg-white/10 hover:bg-white/20 px-2 py-1"
-                    >
-                      <span className="sm:hidden">Bring a friend</span>
-                      <span className="hidden sm:inline">Bring a friend</span>
-                    </button>
-                  </Tooltip.Trigger>
-                  <Tooltip.Portal>
-                    <Tooltip.Content
-                      side="top"
-                      align="center"
-                      sideOffset={8}
-                      className="z-[9999] rounded-xl animate-pulse bg-white text-black text-xs font-semibold px-3 py-2 shadow-2xl ring-2 ring-black/10 data-[state=delayed-open]:animate-in data-[state=closed]:animate-out data-[side=top]:slide-in-from-bottom-1"
-                    >
-                      Click here to invite
-                      <span className="hidden sm:inline text-[10px] font-normal text-black/60 ml-1">(share link)</span>
-                      <Tooltip.Arrow className="fill-white drop-shadow" />
-                    </Tooltip.Content>
-                  </Tooltip.Portal>
-                </Tooltip.Root>
-              </Tooltip.Provider>
-            </div>
+            <RoomHeaderBar
+              roomCode={roomCode}
+              connected={connected}
+              peers={peers}
+              copied={copied}
+              onCopyLink={() => {
+                const url = typeof window !== "undefined" ? window.location.href : "";
+                navigator.clipboard?.writeText(url).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }).catch(() => {});
+              }}
+              onInvite={() => setShowInvite(true)}
+              showInviteHint={showInviteHint}
+            />
 
             {/* Status badges */}
-            <div className="flex items-center justify-center gap-3">
-              {(() => {
-                const hasPlayerX = state.players?.X !== null && state.players?.X !== undefined && state.players?.X !== '';
-                const hasPlayerO = state.players?.O !== null && state.players?.O !== undefined && state.players?.O !== '';
-                const playerCount = (hasPlayerX ? 1 : 0) + (hasPlayerO ? 1 : 0);
-                
-                if (playerCount === 0) {
-                  return <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-white/80">Waiting for players…</span>;
-                } else if (playerCount === 1) {
-                  return <span className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-white/80">Waiting for opponent…</span>;
-                }
-                return null;
-              })()}
-              {role && !state.winner && state.next === role && (
-                (role === 'X' ? !!state.players?.O : !!state.players?.X)
-              ) ? (
-                <span className="animate-pulse rounded-full bg-white text-black px-3 py-1 text-xs font-semibold">Your turn</span>
-              ) : null}
-              {(() => {
-                if (state.winner) return null;
-                const hasBoth = !!state.players?.X && !!state.players?.O;
-                if (!hasBoth) return null;
-                const isMyTurn = role && state.next === role;
-                if (isMyTurn) return null;
-                const nextName = state.next === 'X' ? (state.names?.X || 'Player 1') : (state.names?.O || 'Player 2');
-                const nextAvatar = state.next === 'X' ? (state.avatars?.X || null) : (state.avatars?.O || null);
-                return (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/5 px-3 py-1 text-xs text-white/80">
-                    {nextAvatar ? (
-                      <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
-                        <Image src={nextAvatar} alt="avatar" width={16} height={16} />
-                      </span>
-                    ) : null}
-                    {nextName}'s turn
-                  </span>
-                );
-              })()}
-            </div>
+            <StatusBadges
+              players={state.players}
+              role={role}
+              winner={state.winner}
+              next={state.next}
+              names={state.names}
+              avatars={state.avatars}
+            />
 
             {/* Players summary */}
-            <div className="text-center text-white/70 text-sm flex items-center justify-center gap-3">
-              <span className="inline-flex items-center gap-1">
-                X:
-                {state.avatars?.X ? (
-                  <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
-                    <Image src={state.avatars.X} alt="X avatar" width={16} height={16} />
-                  </span>
-                ) : null}
-                <span className="font-semibold inline-flex items-center gap-1">
-                  {state.names?.X || '—'}
-                  {state.coinsMode?.X ? (
-                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-2 py-0.5 text-[10px] text-amber-200">
-                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
-                      Daddy mode
-                    </span>
-                  ) : state.coinsModePending?.X ? (
-                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-2 py-0.5 text-[10px] text-amber-200/80">
-                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
-                      1/2 Daddy mode
-                    </span>
-                  ) : null}
-                </span>
-              </span>
-              <span className="text-white/40">·</span>
-              <span className="inline-flex items-center gap-1">
-                O:
-                {state.avatars?.O ? (
-                  <span className="inline-block h-4 w-4 overflow-hidden rounded-full bg-white/10">
-                    <Image src={state.avatars.O} alt="O avatar" width={16} height={16} />
-                  </span>
-                ) : null}
-                <span className="font-semibold inline-flex items-center gap-1">
-                  {state.names?.O || '—'}
-                  {state.coinsMode?.O ? (
-                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-2 py-0.5 text-[10px] text-amber-200">
-                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
-                      Daddy mode
-                    </span>
-                  ) : state.coinsModePending?.O ? (
-                    <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-2 py-0.5 text-[10px] text-amber-200/80">
-                      <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
-                      1/2 Daddy mode
-                    </span>
-                  ) : null}
-                </span>
-              </span>
-            </div>
+            <PlayersSummary
+              names={state.names}
+              avatars={state.avatars}
+              coinsMode={state.coinsMode}
+              coinsModePending={state.coinsModePending}
+            />
 
             <div className="flex justify-center">
               <Board 
                 board={state.board} 
                 onMove={makeMove} 
-                highlight={state.winner && state.winner !== 'Draw' ? winningLine(state.board) : null}
+                highlight={highlight}
                 disabled={
                   !!state.winner ||
                   (role === null) || (
@@ -822,11 +679,7 @@ export default function GameClient() {
             {/* DaddyCoins Mode toggle removed by product decision */}
 
             <div className="min-h-[2.25rem] text-center">
-              {state.winner ? (
-                <div className="text-xl font-bold">
-                  {state.winner === "Draw" ? "It's a draw!" : `${state.winner} wins!`}
-                </div>
-              ) : null}
+              <WinnerBanner winner={state.winner} />
             </div>
 
             <div className="flex justify-end md:justify-center">
@@ -845,360 +698,41 @@ export default function GameClient() {
         )}
       {/* Invite modal */}
       {roomCode && showInvite && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-xl text-center">
-            {(() => {
-              const hostName = state.names?.X || 'Player 1';
-              return (
-                <>
-                  <h2 className="text-xl font-bold mb-1">Scan to join {hostName}'s room</h2>
-                  <div className="text-white/60 text-sm mb-3">Room {roomCode}</div>
-                </>
-              );
-            })()}
-            {(() => {
-              const url = typeof window !== 'undefined' ? window.location.href : '';
-              const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
-              return (
-                <>
-                  <div className="flex items-center justify-center mb-4">
-                    {/* External QR image service for simplicity; can be replaced with local generator later */}
-                    <img src={qrSrc} alt="Room QR code" className="rounded bg-white/5 p-2" />
-                  </div>
-                  <div className="text-xs text-white/60 break-all mb-3 px-2">{url}</div>
-                  <div className="flex gap-3 justify-center">
-                    <button
-                      onClick={async () => {
-                        if (!url) return;
-                        setShareBusy(true);
-                        setShareDone(null);
-                        try {
-                          if (navigator.share && window.isSecureContext) {
-                            await navigator.share({ title: 'Join my Tic Tac Toe room', text: 'Let’s play!', url });
-                            setShareDone('shared');
-                          } else if (navigator.clipboard && window.isSecureContext) {
-                            await navigator.clipboard.writeText(url);
-                            setShareDone('copied');
-                          } else {
-                            // Fallback: open mailto as a last resort
-                            const mail = `mailto:?subject=${encodeURIComponent('Join my Tic Tac Toe room')}&body=${encodeURIComponent(url)}`;
-                            window.location.href = mail;
-                          }
-                        } catch {
-                          // ignore
-                        } finally {
-                          setShareBusy(false);
-                          // Reset feedback after a moment
-                          if (shareDone !== null) {
-                            setTimeout(() => setShareDone(null), 1500);
-                          }
-                        }
-                      }}
-                      className="rounded bg-white text-black hover:bg-white/90 px-4 py-2 font-semibold flex items-center disabled:opacity-60"
-                      disabled={shareBusy}
-                    ><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
-                  </svg>{shareBusy ? 'Sharing…' : shareDone === 'copied' ? 'Copied!' : shareDone === 'shared' ? 'Shared!' : 'Share'}</button>
-                    <button
-                      onClick={() => setShowInvite(false)}
-                      className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2"
-                    >Close</button>
-                  </div>
-                  <div className="sr-only" aria-live="polite">
-                    {shareDone === 'copied' ? 'Link copied to clipboard' : shareDone === 'shared' ? 'Share dialog opened' : ''}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
+        <InviteModal
+          roomCode={roomCode}
+          hostName={state.names?.X || 'Player 1'}
+          onClose={() => setShowInvite(false)}
+          shareBusy={shareBusy}
+          shareDone={shareDone}
+          setShareBusy={setShareBusy}
+          setShareDone={setShareDone}
+        />
       )}
         </div>
       </div>
       
       {/* Join modal */}
       {roomCode && showJoin && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="w-full max-w-md rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-xl">
-            {(() => {
-              const hasX = !!(state.players?.X);
-              const hasO = !!(state.players?.O);
-              const xn = state.names?.X || 'Player 1';
-              const on = state.names?.O || 'Player 2';
-              if (!hasX && !hasO) {
-                return (
-                  <>
-                    <h2 className="text-xl font-bold mb-3">Create your player</h2>
-                    {/* Current room players overview */}
-                    <div className="mb-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-white/50">X</span>
-                        {state.avatars?.X ? (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
-                            <Image src={state.avatars.X} alt="X avatar" width={20} height={20} />
-                          </span>
-                        ) : (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
-                        )}
-                      </span>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-white/50">O</span>
-                        {state.avatars?.O ? (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
-                            <Image src={state.avatars.O} alt="O avatar" width={20} height={20} />
-                          </span>
-                        ) : (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
-                        )}
-                        <span className="font-medium inline-flex items-center gap-1">
-                          {state.names?.O || "—"}
-                        </span>
-                      </span>
-                    </div>
-
-                    {session?.user ? (
-                      <>
-                        <p className="text-white/70 mb-3 inline-flex items-center gap-2">
-                          <span>Signed in as</span>
-                          {session.user.image ? (
-                            <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
-                              <Image src={session.user.image} alt="Your avatar" width={20} height={20} />
-                            </span>
-                          ) : null}
-                          <span className="font-semibold">{session.user.name || "Player"}</span>.
-                          <span>Your name will be used.</span>
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-white/70 mb-4">Join quickly with an account, or continue without one.</p>
-                        <div className="mb-4 grid gap-2">
-                          <button
-                            onClick={() => signIn("discord", { callbackUrl: socialCallbackUrl })}
-                            className="flex items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2 font-medium text-white hover:opacity-90"
-                          >
-                            <Image src="icons/discord.svg" alt="Discord" width={20} height={20} className="invert brightness-0" />
-                            Continue with Discord
-                          </button>
-                          <button
-                            onClick={() => signIn("google", { callbackUrl: socialCallbackUrl })}
-                            className="flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 font-medium text-black hover:bg-white/90"
-                          >
-                            <Image src="icons/google.svg" alt="Google" width={20} height={20} />
-                            Continue with Google
-                          </button>
-                        </div>
-                        <div className="my-3 flex items-center gap-3 text-xs text-white/50">
-                          <div className="h-px flex-1 bg-white/10" />
-                          <span>or join without account</span>
-                          <div className="h-px flex-1 bg-white/10" />
-                        </div>
-                        <p className="text-white/70 mb-3">Enter your name. You will play as X.</p>
-                      </>
-                    )}
-                    <input
-                      autoFocus
-                      value={session?.user?.name ?? joinName}
-                      onChange={(e) => setJoinName(e.target.value)}
-                      placeholder="Player 1"
-                      className="w-full rounded-lg bg-white/10 px-4 py-2 outline-none mb-4"
-                      disabled={!!session?.user}
-                    />
-                    {/* Mode selection cards */}
-                    <div className="mb-4 grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setJoinMode('free')}
-                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='free' ? 'border-white bg-white text-black' : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10'}`}
-                      >
-                        <div className="text-sm font-semibold">Free Mode</div>
-                        <div className="text-xs text-white/60">Play for fun. No coins.</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => canSelectDaddy && setJoinMode('daddy')}
-                        disabled={!canSelectDaddy}
-                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='daddy' ? 'border-amber-300 bg-amber-200 text-black' : 'border-amber-300/30 bg-amber-200/10 text-amber-200'} ${!canSelectDaddy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-200/20'}`}
-                        title={!canSelectDaddy ? (!session?.user ? 'Sign in to use Daddy Mode' : 'Need at least 1 DaddyCoin') : 'Daddy Mode (costs 1 coin when an authenticated opponent joins)'}
-                      >
-                        <div className="flex items-center gap-2 text-sm font-semibold">
-                          <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={14} height={14} /> Daddy Mode
-                        </div>
-                        <div className="text-[11px] mt-1 opacity-80">
-                          Costs 1 DaddyCoin when a signed-in opponent joins. Winner rewards: +2 (vs free) / +3 (vs daddy).
-                        </div>
-                      </button>
-                    </div>
-                    <div className="flex gap-3 justify-end">
-                      <button
-                        disabled={joining}
-                        onClick={() => setShowJoin(false)}
-                        className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2"
-                      >Cancel</button>
-                      <button
-                        disabled={joining}
-                        onClick={() => joinAs('X')}
-                        className="rounded bg-white text-black hover:bg-white/90 px-4 py-2 font-semibold disabled:opacity-60"
-                      >{joining ? 'Joining…' : 'Start as X'}</button>
-                    </div>
-                  </>
-                );
-              }
-              if (hasX && !hasO) {
-                return (
-                  <>
-                    <h2 className="text-xl font-bold mb-3">Join game</h2>
-                    {/* Current room players overview */}
-                    <div className="mb-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-white/50">X</span>
-                        {state.avatars?.X ? (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
-                            <Image src={state.avatars.X} alt="X avatar" width={20} height={20} />
-                          </span>
-                        ) : (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
-                        )}
-                        <span className="font-medium">{state.names?.X || "—"}
-                          {state.coinsMode?.X ? (
-                            <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/10 px-1.5 py-0.5 text-[10px] text-amber-200">
-                              <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
-                              Daddy mode
-                            </span>
-                          ) : state.coinsModePending?.X ? (
-                            <span className="ml-1 inline-flex items-center gap-1 rounded-full border border-amber-300/30 bg-amber-200/5 px-1.5 py-0.5 text-[10px] text-amber-200/80">
-                              <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={12} height={12} />
-                              &frac12; Daddy mode
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-white/50">O</span>
-                        {state.avatars?.O ? (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
-                            <Image src={state.avatars.O} alt="O avatar" width={20} height={20} />
-                          </span>
-                        ) : (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10" />
-                        )}
-                        <span className="font-medium">{state.names?.O || "—"}</span>
-                      </span>
-                    </div>
-
-                    {session?.user ? (
-                      <p className="text-white/70 mb-4 inline-flex items-center gap-2">
-                        <span>Signed in as</span>
-                        {session.user.image ? (
-                          <span className="inline-block h-5 w-5 overflow-hidden rounded-full bg-white/10">
-                            <Image src={session.user.image} alt="Your avatar" width={20} height={20} />
-                          </span>
-                        ) : null}
-                        <span className="font-semibold">{session.user.name || "Player"}</span>.
-                        <span>Going to play with <span className="font-semibold">{xn}</span></span>
-                      </p>
-                    ) : null}
-
-                    {/* Mode selection cards for Player 2 (visible in both auth and guest flows) */}
-                    <div className="mb-4 grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setJoinMode('free')}
-                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='free' ? 'border-white bg-white text-black' : 'border-white/20 bg-white/5 text-white/80 hover:bg-white/10'}`}
-                      >
-                        <div className="text-sm font-semibold">Free Mode</div>
-                        <div className="text-xs text-white/60">Play for fun. No coins.</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => canSelectDaddy && setJoinMode('daddy')}
-                        disabled={!canSelectDaddy}
-                        className={`rounded-xl border px-3 py-3 text-left ${joinMode==='daddy' ? 'border-amber-300 bg-amber-200 text-black' : 'border-amber-300/30 bg-amber-200/10 text-amber-200'} ${!canSelectDaddy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-amber-200/20'}`}
-                        title={!canSelectDaddy ? (!session?.user ? 'Sign in to use Daddy Mode' : 'Need at least 1 DaddyCoin') : 'Daddy Mode (costs 1 coin when an authenticated opponent joins)'}
-                      >
-                        <div className="flex items-center gap-2 text-sm font-semibold">
-                          <Image src="/icons/daddycoin.svg" alt="DaddyCoin" width={14} height={14} /> Daddy Mode
-                        </div>
-                        <div className="text-[11px] mt-1 opacity-80">
-                          Costs 1 DaddyCoin when a signed-in opponent joins. Winner rewards: +2 (vs free) / +3 (vs daddy).
-                        </div>
-                      </button>
-                    </div>
-
-                    {!session?.user ? (
-                      <> 
-                        <p className="text-white/70 mb-4">Join with an account or continue as guest. Going to play with <span className="font-semibold">{xn}</span></p>
-                        <div className="mb-4 grid gap-2">
-                          <button
-                            onClick={() => signIn("discord", { callbackUrl: socialCallbackUrl })}
-                            className="flex items-center justify-center gap-2 rounded-lg bg-[#5865F2] px-4 py-2 font-medium text-white hover:opacity-90"
-                          >
-                            <Image src="icons/discord.svg" alt="Discord" width={20} height={20} className="invert brightness-0" />
-                            Join with Discord
-                          </button>
-                          <button
-                            onClick={() => signIn("google", { callbackUrl: socialCallbackUrl })}
-                            className="flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 font-medium text-black hover:bg-white/90"
-                          >
-                            <Image src="icons/google.svg" alt="Google" width={20} height={20} />
-                            Join with Google
-                          </button>
-                        </div>
-                        <div className="my-3 flex items-center gap-3 text-xs text-white/50">
-                          <div className="h-px flex-1 bg-white/10" />
-                          <span>or join without account</span>
-                          <div className="h-px flex-1 bg-white/10" />
-                        </div>
-                        <label className="text-white/70 text-sm">Your player name</label>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-white/70 mb-3">Enter your name. You will play as O.</p>
-                      </>
-                    )}
-                    <input
-                      autoFocus
-                      value={session?.user?.name ?? joinName}
-                      onChange={(e) => setJoinName(e.target.value)}
-                      placeholder="Player 2"
-                      className="w-full rounded-lg bg-white/10 px-4 py-2 outline-none mb-4 mt-1"
-                      disabled={!!session?.user}
-                    />
-                    <div className="flex gap-3 justify-between">
-                      <button
-                        disabled={joining}
-                        onClick={() => setShowJoin(false)}
-                        className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2"
-                      >Watch instead</button>
-                      <button
-                        disabled={joining}
-                        onClick={() => joinAs('O')}
-                        className="rounded bg-white text-black hover:bg-white/90 px-4 py-2 font-semibold disabled:opacity-60"
-                      >{joining ? 'Joining…' : 'Join as O'}</button>
-                    </div>
-                  </>
-                );
-              }
-              // both roles taken
-              return (
-                <>
-                  <h2 className="text-xl font-bold mb-3">Room is full</h2>
-                  <p className="text-white/70 mb-4"><span className="font-semibold">{xn}</span> is playing with <span className="font-semibold">{on}</span></p>
-                  <div className="flex gap-3 justify-between">
-                    <button
-                      onClick={() => setShowJoin(false)}
-                      className="rounded bg-white text-black hover:bg-white/90 px-4 py-2 font-semibold"
-                    >Watch them play</button>
-                    <button
-                      onClick={() => { setRoomCode(""); setState(initialState()); setRole(null); router.replace('/tictactoe'); }}
-                      className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2"
-                    >Create your own room</button>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
+        <JoinModal
+          roomCode={roomCode}
+          players={state.players}
+          names={state.names}
+          avatars={state.avatars}
+          sessionPresent={!!session?.user}
+          sessionUserName={session?.user?.name ?? null}
+          sessionUserImage={session?.user?.image ?? null}
+          socialCallbackUrl={socialCallbackUrl}
+          canSelectDaddy={canSelectDaddy}
+          joinMode={joinMode}
+          setJoinMode={setJoinMode}
+          joinName={joinName}
+          setJoinName={setJoinName}
+          joining={joining}
+          onClose={() => setShowJoin(false)}
+          onJoinX={() => joinAs('X')}
+          onJoinO={() => joinAs('O')}
+          onCreateOwnRoom={() => { setRoomCode(""); setState(initialState()); setRole(null); router.replace('/tictactoe'); }}
+        />
       )}
     </main>
   );

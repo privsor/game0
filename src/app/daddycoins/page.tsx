@@ -26,11 +26,23 @@ async function loadRazorpay(): Promise<boolean> {
 function detectCurrency(): "INR" | "GBP" {
   try {
     if (typeof window === "undefined") return "INR";
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    const lang = navigator.language || "";
-    if (tz.includes("Kolkata") || lang.toLowerCase().includes("-in") || lang.toLowerCase().endsWith("-in")) {
-      return "INR";
-    }
+    const opts = Intl.DateTimeFormat().resolvedOptions();
+    const tz = (opts.timeZone || "").toLowerCase();
+    const lang = (navigator.language || "").toLowerCase();
+    const langs = (navigator.languages || []).map((l) => (l || "").toLowerCase());
+    const offsetMinutes = new Date().getTimezoneOffset(); // IST is -330
+
+    // Check for Indian region via language list
+    const langIsIN = lang.endsWith("-in") || langs.some((l) => l.endsWith("-in"));
+
+    // Check for Indian timezone names used across platforms
+    const tzIsIN = tz.includes("kolkata") || tz.includes("calcutta") || tz === "asia/kolkata" || tz === "asia/calcutta";
+
+    // Check for IST offset
+    const offsetIsIST = offsetMinutes === -330;
+
+    if (langIsIN || tzIsIN || offsetIsIST) return "INR";
+
     // Fallback to GBP for now (international)
     return "GBP";
   } catch {
@@ -46,8 +58,27 @@ export default function DaddyCoinsPage() {
   const balance = balanceData?.balance ?? 0;
 
   useEffect(() => {
-    setCurrency(detectCurrency());
+    try {
+      if (typeof window === "undefined") return;
+      const stored = window.localStorage.getItem("daddycoins_currency");
+      if (stored === "INR" || stored === "GBP") {
+        setCurrency(stored);
+      } else {
+        setCurrency(detectCurrency());
+      }
+    } catch {
+      setCurrency(detectCurrency());
+    }
   }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem("daddycoins_currency", currency);
+    } catch {
+      // ignore persistence errors
+    }
+  }, [currency]);
 
   const packages = useMemo(
     () => {
