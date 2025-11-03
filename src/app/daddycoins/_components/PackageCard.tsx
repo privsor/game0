@@ -73,7 +73,7 @@ export default function PackageCard({ coins, priceLabel, basePrice, sub, busyId,
   );
 
   return (
-    <div className="relative z-0 rounded-xl border border-white/10 bg-white/5 p-5">
+    <div className="relative z-0 rounded-xl border border-white/10 bg-white/5 p-2 md:p-5">
       <div className="mb-3 flex w-full flex-col items-start gap-2 isolate">
         {/* Render rows */}
         {rows.map((count, idx) => (
@@ -94,9 +94,9 @@ export default function PackageCard({ coins, priceLabel, basePrice, sub, busyId,
       <button
         onClick={() => onBuy(coins)}
         disabled={busyId === coins}
-        className="w-full rounded-md bg-white px-3 py-2 font-semibold text-black hover:bg-white/90 disabled:opacity-50"
+        className="w-full rounded-md bg-white px-3 py-2 font-semibold text-lg text-black hover:bg-white/90 disabled:opacity-50"
       >
-        {busyId === coins ? "Processing…" : `Buy ${coins} DaddyCoins`}
+        {busyId === coins ? "Processing…" : `Buy`}
       </button>
     </div>
   );

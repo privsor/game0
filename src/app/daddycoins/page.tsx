@@ -179,11 +179,11 @@ export default function DaddyCoinsPage() {
   return (
     <>
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} callbackUrl="/daddycoins" />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 pt-2 pb-12">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Buy DaddyCoins</h1>
-          <p className="text-white/60">Top up your balance to play and win more gifts.</p>
+          <h1 className="text-lg md:text-2xl font-extrabold tracking-tight">Buy DaddyCoins</h1>
+          <p className="text-sm md:text-white/60">Top up your balance to play and win more gifts.</p>
         </div>
         {/* <div className="flex items-center gap-3">
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
@@ -200,7 +200,7 @@ export default function DaddyCoinsPage() {
         </div> */}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
+      <div className="grid grid-cols-1 md:gap-6 gap-2 sm:grid-cols-2 lg:grid-cols-2">
         {packages.map((p) => (
           <PackageCard
             key={p.coins}
