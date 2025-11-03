@@ -28,6 +28,8 @@ export const env = createEnv({
 		RAZORPAY_KEY_ID: z.string(),
 		RAZORPAY_KEY_SECRET: z.string(),
 		RAZORPAY_WEBHOOK_SECRET: z.string(),
+		// Comma-separated list of admin emails
+		ADMIN_EMAILS: z.string().optional(),
 	},
 
 	/**
@@ -61,6 +63,7 @@ export const env = createEnv({
 		RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
 		RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
 		NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+		ADMIN_EMAILS: process.env.ADMIN_EMAILS,
 	},
 	/**
 	 * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

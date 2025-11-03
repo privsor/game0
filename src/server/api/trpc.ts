@@ -12,6 +12,7 @@ import superjson from "superjson";
 import { ZodError } from "zod";
 
 import { auth } from "~/server/auth";
+import { env } from "~/env";
 import { db } from "~/server/db";
 
 /**
@@ -128,6 +129,33 @@ export const protectedProcedure = t.procedure
 			ctx: {
 				// infers the `session` as non-nullable
 				session: { ...ctx.session, user: ctx.session.user },
+			},
+		});
+	});
+
+/**
+ * Admin-only procedure
+ *
+ * Requires an authenticated session AND the user's email to be present in ADMIN_EMAILS allowlist.
+ */
+export const adminProcedure = t.procedure
+	.use(timingMiddleware)
+	.use(({ ctx, next }) => {
+		const session = ctx.session;
+		if (!session?.user) {
+			throw new TRPCError({ code: "UNAUTHORIZED" });
+		}
+		const allow = (env.ADMIN_EMAILS ?? "")
+			.split(",")
+			.map((s) => s.trim().toLowerCase())
+			.filter(Boolean);
+		const email = session.user.email?.toLowerCase();
+		if (!email || !allow.includes(email)) {
+			throw new TRPCError({ code: "FORBIDDEN" });
+		}
+		return next({
+			ctx: {
+				session: { ...session, user: session.user },
 			},
 		});
 	});

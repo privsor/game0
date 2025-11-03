@@ -169,6 +169,7 @@ export const gifts = createTable(
 		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
 		title: d.varchar({ length: 255 }).notNull(),
 		imageUrl: d.text(),
+		videoUrl: d.text(),
 		coinCost: d.integer().notNull(),
 		vendor: d.varchar({ length: 64 }).notNull().default("amazon"),
 		voucherAmount: d.integer(), // e.g., amount of the voucher in local currency
