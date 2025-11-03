@@ -6,6 +6,7 @@ import { env } from "~/env";
 import { useSession } from "next-auth/react";
 import AuthModal from "../_components/AuthModal";
 import Image from "next/image";
+import PackageCard from "./_components/PackageCard";
 
 // Minimal Razorpay typings
 declare global {
@@ -201,103 +202,15 @@ export default function DaddyCoinsPage() {
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
         {packages.map((p) => (
-          <div key={p.coins} className="rounded-xl border border-white/10 bg-white/5 p-5">
-            {/* Coin stacks layout */}
-            <div className="mb-3 flex w-full flex-col items-start gap-2">
-              {(() => {
-                // Determine stack layout per row based on coin package
-                // Each stack visually represents up to 10 coins
-                const stacks = Math.ceil(p.coins / 10);
-                let rows: number[] = [];
-                if (p.coins === 30) {
-                  rows = [3]; // 3 stacks in one row
-                } else if (p.coins === 100) {
-                  rows = [4, 4, 2]; // 10 stacks as 4-4-2
-                } else if (p.coins === 200) {
-                  rows = [5, 5, 5, 5]; // 20 stacks, 5 per row
-                } else {
-                  // Fallback: fill rows up to 4 per row to keep visuals readable
-                  const perRow = 4;
-                  let remaining = stacks;
-                  while (remaining > 0) {
-                    rows.push(Math.min(perRow, remaining));
-                    remaining -= perRow;
-                  }
-                }
-
-                const maxInRow = Math.max(...rows);
-                // Size the stack based on how many we need to fit per row
-                const size = maxInRow >= 5 ? 56 : maxInRow === 4 ? 83.33 : maxInRow === 3 ? 100 : 100; // px
-                const offset = 2; // tight stack step in px
-                const shown = 10; // visual per stack
-                const box = size + offset * (shown - 1);
-
-                // Reusable renderer for a single stack
-                const Stack = () => (
-                  <div
-                    className="relative"
-                    style={{ width: box, height: box }}
-                    aria-label={`coin stack of ${shown}`}
-                  >
-                    {/* Base tight shadow */}
-                    <div
-                      className="pointer-events-none absolute left-1/2 top-1/2 -z-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                      style={{
-                        width: box * 0.45,
-                        height: box * 0.3,
-                        background:
-                          "radial-gradient(ellipse at center, rgba(0,0,0,0.9), rgba(0,0,0,0) 45%)",
-                        filter: "blur(1px)",
-                      }}
-                    />
-                    {Array.from({ length: shown }).map((_, i) => (
-                      <Image
-                        key={i}
-                        src="/daddycoin.svg"
-                        alt="DaddyCoin"
-                        width={size}
-                        height={size}
-                        className="absolute rounded-full ring-1 ring-white/10"
-                        style={{
-                          left: i * offset,
-                          bottom: i * offset,
-                          zIndex: i + 1,
-                          filter:
-                            "drop-shadow(0 2px 1.5px rgba(0,0,0,0.95)) drop-shadow(0 0.5px 0.5px rgba(0,0,0,0.9))",
-                        }}
-                        priority={i < 3}
-                      />
-                    ))}
-                  </div>
-                );
-
-                // Render rows
-                let rendered = 0;
-                return (
-                  <>
-                    {rows.map((count, idx) => (
-                      <div key={`row-${idx}`} className="flex w-full flex-row items-center gap-2">
-                        {Array.from({ length: count }).map((_, j) => {
-                          rendered += 1;
-                          return <Stack key={`stack-${idx}-${j}`} />;
-                        })}
-                      </div>
-                    ))}
-                  </>
-                );
-              })()}
-            </div>
-            
-            <div className="mb-1 text-sm text-white/60">{p.sub}</div>
-            <div className="mb-4 text-3xl font-extrabold">{p.priceLabel} {p.basePrice !== p.priceLabel && <span className="text-white/60 line-through">{p.basePrice}</span>}</div>
-            <button
-              onClick={() => handleBuy(p.coins)}
-              disabled={busyId === p.coins}
-              className="w-full rounded-md bg-white px-3 py-2 font-semibold text-black hover:bg-white/90 disabled:opacity-50"
-            >
-              {busyId === p.coins ? "Processing…" : `Buy ${p.coins} DaddyCoins`}
-            </button>
-          </div>
+          <PackageCard
+            key={p.coins}
+            coins={p.coins}
+            priceLabel={p.priceLabel}
+            basePrice={(p as any).basePrice}
+            sub={p.sub}
+            busyId={busyId}
+            onBuy={handleBuy}
+          />
         ))}
       </div>
       </main>
