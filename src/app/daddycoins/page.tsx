@@ -209,6 +209,7 @@ export default function DaddyCoinsPage() {
             basePrice={(p as any).basePrice}
             sub={p.sub}
             busyId={busyId}
+            balance={balance}
             onBuy={handleBuy}
           />
         ))}

@@ -205,15 +205,41 @@ export async function POST(req: Request) {
     }
 
     // Promotion: if both seats are authenticated, set effective flags and charge as needed (charging independent of opponent's selection)
-    const afterVals = await (redis as any).hmget(key, 'x','o','authx','autho','selx','selo','effx','effo','chargedx','chargedo');
-    const _authx = String((afterVals as any).authx ?? '0');
-    const _autho = String((afterVals as any).autho ?? '0');
-    let _selx = String((afterVals as any).selx ?? '');
-    let _selo = String((afterVals as any).selo ?? '');
-    let _effx = String((afterVals as any).effx ?? '0');
-    let _effo = String((afterVals as any).effo ?? '0');
-    let _chargedx = String((afterVals as any).chargedx ?? '0');
-    let _chargedo = String((afterVals as any).chargedo ?? '0');
+    // Read a fresh snapshot to avoid using stale px/po when deciding charges
+    const afterVals = await (redis as any).hmget(
+      key,
+      'x','o','authx','autho','selx','selo','effx','effo','chargedx','chargedo'
+    );
+
+    // Support both Upstash array-style and object-style responses
+    let _px = '', _po = '';
+    let _authx = '0', _autho = '0';
+    let _selx = '', _selo = '';
+    let _effx = '0', _effo = '0';
+    let _chargedx = '0', _chargedo = '0';
+    if (Array.isArray(afterVals)) {
+      _px = String(afterVals[0] ?? '');
+      _po = String(afterVals[1] ?? '');
+      _authx = String(afterVals[2] ?? '0');
+      _autho = String(afterVals[3] ?? '0');
+      _selx = String(afterVals[4] ?? '');
+      _selo = String(afterVals[5] ?? '');
+      _effx = String(afterVals[6] ?? '0');
+      _effo = String(afterVals[7] ?? '0');
+      _chargedx = String(afterVals[8] ?? '0');
+      _chargedo = String(afterVals[9] ?? '0');
+    } else if (afterVals && typeof afterVals === 'object') {
+      _px = String((afterVals as any).x ?? '');
+      _po = String((afterVals as any).o ?? '');
+      _authx = String((afterVals as any).authx ?? '0');
+      _autho = String((afterVals as any).autho ?? '0');
+      _selx = String((afterVals as any).selx ?? '');
+      _selo = String((afterVals as any).selo ?? '');
+      _effx = String((afterVals as any).effx ?? '0');
+      _effo = String((afterVals as any).effo ?? '0');
+      _chargedx = String((afterVals as any).chargedx ?? '0');
+      _chargedo = String((afterVals as any).chargedo ?? '0');
+    }
 
     if (_authx === '1' && _autho === '1') {
       // effective daddy mode equals selection
@@ -223,8 +249,8 @@ export async function POST(req: Request) {
 
       // Charge -1 for each effective daddy mode if not yet charged
       const toCharge: Array<{ who: 'X'|'O'; userId: string | null }> = [];
-      if (_effx === '1' && _chargedx !== '1') toCharge.push({ who: 'X', userId: px || null });
-      if (_effo === '1' && _chargedo !== '1') toCharge.push({ who: 'O', userId: po || null });
+      if (_effx === '1' && _chargedx !== '1') toCharge.push({ who: 'X', userId: _px || null });
+      if (_effo === '1' && _chargedo !== '1') toCharge.push({ who: 'O', userId: _po || null });
 
       if (toCharge.length > 0) {
         for (const charge of toCharge) {
@@ -252,6 +278,9 @@ export async function POST(req: Request) {
           // mark charged
           if (charge.who === 'X') { await (redis as any).hmset(key, { chargedx: '1' }); _chargedx = '1'; }
           if (charge.who === 'O') { await (redis as any).hmset(key, { chargedo: '1' }); _chargedo = '1'; }
+          try {
+            console.log('[JOIN:charged]', { room, who: charge.who, userId: charge.userId });
+          } catch {}
         }
       }
     }

@@ -9,10 +9,11 @@ type PackageCardProps = {
   basePrice?: string;
   sub: string;
   busyId: number | null;
+  balance: number;
   onBuy: (coins: number) => void;
 };
 
-export default function PackageCard({ coins, priceLabel, basePrice, sub, busyId, onBuy }: PackageCardProps) {
+export default function PackageCard({ coins, priceLabel, basePrice, sub, busyId, balance, onBuy }: PackageCardProps) {
   // Determine stack layout per row based on coin package
   // Each stack visually represents up to 10 coins
   const stacks = Math.ceil(coins / 10);
@@ -93,10 +94,10 @@ export default function PackageCard({ coins, priceLabel, basePrice, sub, busyId,
       </div>
       <button
         onClick={() => onBuy(coins)}
-        disabled={busyId === coins}
+        disabled={busyId === coins || balance >= 200}
         className="w-full rounded-md bg-white px-3 py-2 font-semibold text-lg text-black hover:bg-white/90 disabled:opacity-50"
       >
-        {busyId === coins ? "Processing…" : `Buy`}
+        {busyId === coins ? "Processing…" : balance >= 200 ? "Balance Limit Reached - play and earn more" : `Buy`}
       </button>
     </div>
   );

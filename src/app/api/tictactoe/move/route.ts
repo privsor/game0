@@ -78,6 +78,79 @@ redis.call('PEXPIRE', key, ttl)
 return {'OK', b, nextTurn, winner, nt, px, po}
 `;
 
+// Atomically decide and mark reward distribution exactly once per room.
+// Returns an array:
+// { 'OK', decision, amount, winnerRole, winnerUserId, claimExpiresAt }
+// decision: 'none' | 'direct' | 'claim' | 'claim1' | 'skip' | 'expired'
+// - direct: credit 'amount' to winnerUserId
+// - claim/claim1: a claim has been created in Redis with amount, role, and expiration
+const LUA_REWARD = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local winner = ARGV[2] -- 'X' or 'O'
+if not winner or (winner ~= 'X' and winner ~= 'O') then return {'OK','none',0,'','',0} end
+local rwd = redis.call('HGET', key, 'rwd') or '0'
+if rwd == '1' then return {'OK','skip',0,'','',0} end
+
+-- snapshot flags and seats
+local effx = redis.call('HGET', key, 'effx') or '0'
+local effo = redis.call('HGET', key, 'effo') or '0'
+local authx = redis.call('HGET', key, 'authx') or '0'
+local autho = redis.call('HGET', key, 'autho') or '0'
+local px = redis.call('HGET', key, 'x') or ''
+local po = redis.call('HGET', key, 'o') or ''
+local selx = redis.call('HGET', key, 'selx') or ''
+local selo = redis.call('HGET', key, 'selo') or ''
+
+local award = 0
+if winner == 'X' then
+  if effx == '1' and effo == '1' then award = 3
+  elseif effx == '1' then award = 2
+  elseif effo == '1' then award = 1
+  else award = 0 end
+else -- winner == 'O'
+  if effx == '1' and effo == '1' then award = 3
+  elseif effo == '1' then award = 2
+  elseif effx == '1' then award = 1
+  else award = 0 end
+end
+
+local winnerAuthed = (winner == 'X') and (authx == '1') or (winner == 'O' and autho == '1')
+local winnerUserId = (winner == 'X') and px or po
+
+-- Mark rewards decided to ensure idempotency
+redis.call('HSET', key, 'rwd', '1')
+redis.call('PEXPIRE', key, 24*60*60*1000)
+
+if award > 0 then
+  if winnerAuthed and winnerUserId ~= '' then
+    return {'OK','direct',award,winner,winnerUserId,0}
+  else
+    local expiresAt = now + 24*60*60*1000
+    redis.call('HMSET', key,
+      'claim','1','claimAmount',tostring(award),'claimWinnerRole',winner,
+      'claimEphemeralId', winner == 'X' and px or po,
+      'claimExpiresAt', tostring(expiresAt))
+    return {'OK','claim',award,winner,'',expiresAt}
+  end
+end
+
+-- Special: exactly one pending selection and unauth winner -> +1 claim
+local pendingX = (selx == 'daddy' and effx ~= '1') and 1 or 0
+local pendingO = (selo == 'daddy' and effo ~= '1') and 1 or 0
+local exactlyOnePending = (pendingX + pendingO) == 1
+if award == 0 and exactlyOnePending and not winnerAuthed then
+  local expiresAt = now + 24*60*60*1000
+  redis.call('HMSET', key,
+    'claim','1','claimAmount','1','claimWinnerRole',winner,
+    'claimEphemeralId','',
+    'claimExpiresAt', tostring(expiresAt))
+  return {'OK','claim1',1,winner,'',expiresAt}
+end
+
+return {'OK','none',0,winner,'',0}
+`;
+
 function boardStringToArray(b: string) {
   return b.split("").map((c) => (c === '-' ? null : (c as 'X'|'O')));
 }
@@ -179,86 +252,51 @@ export async function POST(req: Request) {
     // Determine user's role for client
     const userRole = userId === px ? 'X' : userId === po ? 'O' : null;
 
-    // On game conclusion, distribute DaddyCoins based on coins mode flags (idempotent)
+    // On game conclusion, distribute DaddyCoins via atomic Lua to avoid races
     const winnerSymbol = state.winner === 'Draw' ? 'D' : state.winner; // 'X' | 'O' | 'D' | null
     if (winnerSymbol && winnerSymbol !== 'D') {
       try {
-        // check and set reward flag atomically-ish
-        if (rwd !== '1') {
-          // compute award from effective daddy mode snapshot
-          const xOn = effx === '1';
-          const oOn = effo === '1';
-          let award = 0;
-          if (winnerSymbol === 'X') {
-            if (xOn && oOn) award = 3; else if (xOn) award = 2; else if (oOn) award = 1; else award = 0;
-          } else if (winnerSymbol === 'O') {
-            if (xOn && oOn) award = 3; else if (oOn) award = 2; else if (xOn) award = 1; else award = 0;
-          }
+        const luaRes: any = await (redis as any).eval(
+          LUA_REWARD,
+          [key],
+          [String(Date.now()), winnerSymbol]
+        );
+        // Expect: ['OK', decision, amount, winnerRole, winnerUserId, claimExpiresAt]
+        if (Array.isArray(luaRes) && luaRes[0] === 'OK') {
+          const decision = String(luaRes[1] ?? 'none');
+          const amount = Number(luaRes[2] ?? 0) || 0;
+          const winnerRole = String(luaRes[3] ?? '');
+          const winnerUserId = String(luaRes[4] ?? '');
+          const claimExpiresAt = Number(luaRes[5] ?? 0) || 0;
 
-          console.log('[MOVE:end]', { room, winnerSymbol, effx, effo, selx, selo, authx, autho, award });
-          if (award > 0) {
-            const winnerUserId = winnerSymbol === 'X' ? px : po;
-            const winnerAuthed = winnerSymbol === 'X' ? (authx === '1') : (autho === '1');
-            if (winnerUserId && winnerAuthed) {
-              await db.transaction(async (tx) => {
-                const current = (
-                  await tx.select().from(wallets).where(eq(wallets.userId, winnerUserId)).limit(1)
-                )[0];
-                const newBal = (current?.balance ?? 0) + award;
-                if (!current) {
-                  await tx.insert(wallets).values({ userId: winnerUserId, balance: newBal });
-                } else {
-                  await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, winnerUserId));
-                }
-                await tx.insert(walletTransactions).values({
-                  userId: winnerUserId,
-                  amount: award,
-                  type: 'earn',
-                  reason: `ttt:win:${room}:${winnerSymbol}:${turn}`,
-                });
+          console.log('[MOVE:reward]', { room, decision, amount, winnerRole, winnerUserId, claimExpiresAt });
+
+          if (decision === 'direct' && amount > 0 && winnerUserId) {
+            await db.transaction(async (tx) => {
+              const current = (
+                await tx.select().from(wallets).where(eq(wallets.userId, winnerUserId)).limit(1)
+              )[0];
+              const newBal = (current?.balance ?? 0) + amount;
+              if (!current) {
+                await tx.insert(wallets).values({ userId: winnerUserId, balance: newBal });
+              } else {
+                await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, winnerUserId));
+              }
+              await tx.insert(walletTransactions).values({
+                userId: winnerUserId,
+                amount,
+                type: 'earn',
+                reason: `ttt:win:${room}:${winnerSymbol}:${turn}`,
               });
-            } else {
-              // Winner unauthenticated: create a pending claim tied to the winner's ephemeral seat id
-              const claimExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h
-              const claimWinnerRole = winnerSymbol as 'X'|'O';
-              const claimEphemeralId = winnerSymbol === 'X' ? px : po; // px/po are seat ids (may be empty if spectator won, but here winner is seat)
-              await (redis as any).hmset(key, {
-                claim: '1',
-                claimAmount: String(award),
-                claimWinnerRole,
-                claimEphemeralId: claimEphemeralId || '',
-                claimExpiresAt: String(claimExpiresAt),
-              });
-              console.log('[MOVE:claim-created]', { room, winnerSymbol, amount: award, claimExpiresAt });
-              claimObj = { amount: award, winnerRole: claimWinnerRole, expiresAt: claimExpiresAt };
-            }
+            });
+          } else if ((decision === 'claim' || decision === 'claim1') && amount > 0) {
+            claimObj = { amount, winnerRole: winnerRole as 'X'|'O', expiresAt: claimExpiresAt };
           }
-          // If no award due to ineffective half-daddy, but exactly one pending selection exists and winner is unauth, create +1 claim
-          if (award === 0) {
-            const pendingX = selx === 'daddy' && effx !== '1';
-            const pendingO = selo === 'daddy' && effo !== '1';
-            const exactlyOnePending = (pendingX ? 1 : 0) + (pendingO ? 1 : 0) === 1;
-            const winnerAuthed = winnerSymbol === 'X' ? (authx === '1') : (autho === '1');
-            if (exactlyOnePending && !winnerAuthed) {
-              const claimExpiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h
-              const claimWinnerRole = winnerSymbol as 'X'|'O';
-              await (redis as any).hmset(key, {
-                claim: '1',
-                claimAmount: '1',
-                claimWinnerRole,
-                claimEphemeralId: '',
-                claimExpiresAt: String(claimExpiresAt),
-              });
-              console.log('[MOVE:claim-created]', { room, winnerSymbol, amount: 1, claimExpiresAt });
-              claimObj = { amount: 1, winnerRole: claimWinnerRole, expiresAt: claimExpiresAt };
-            }
-          }
-          // Mark rewards distributed
-          await (redis as any).hset(key, 'rwd', '1');
-          await (redis as any).pexpire(key, 24 * 60 * 60 * 1000);
+        } else {
+          console.error('LUA_REWARD unexpected result', luaRes);
         }
       } catch (e) {
-        console.error('Error distributing DaddyCoins rewards', e);
+        console.error('Error distributing DaddyCoins rewards (lua)', e);
       }
     }
     if (claimObj) (state as any).claim = claimObj;
