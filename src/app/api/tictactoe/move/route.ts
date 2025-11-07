@@ -6,6 +6,7 @@ import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 import { wallets, walletTransactions } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
+import { publishWalletUpdate } from "~/server/lib/ablyServer";
 
 // Redis state layout (hash at key ttt:room:{ROOM})
 // b: 9-char string ("-" empty)
@@ -233,6 +234,19 @@ export async function POST(req: Request) {
       autho = String((nv as any).autho ?? '0');
     }
 
+    // Debug snapshot before reward decision
+    try {
+      console.log('[MOVE:snapshot]', {
+        room,
+        turn,
+        winnerPre: w,
+        eff: { X: effx, O: effo },
+        sel: { X: selx, O: selo },
+        auth: { X: authx, O: autho },
+        seats: { X: px ? 'set' : 'unset', O: po ? 'set' : 'unset' },
+      });
+    } catch {}
+
     let claimObj: { amount: number; winnerRole: 'X'|'O'; expiresAt: number } | null = null;
     const state = {
       board: boardStringToArray(b),
@@ -261,26 +275,35 @@ export async function POST(req: Request) {
           [key],
           [String(Date.now()), winnerSymbol]
         );
-        // Expect: ['OK', decision, amount, winnerRole, winnerUserId, claimExpiresAt]
-        if (Array.isArray(luaRes) && luaRes[0] === 'OK') {
-          const decision = String(luaRes[1] ?? 'none');
-          const amount = Number(luaRes[2] ?? 0) || 0;
-          const winnerRole = String(luaRes[3] ?? '');
-          const winnerUserId = String(luaRes[4] ?? '');
-          const claimExpiresAt = Number(luaRes[5] ?? 0) || 0;
+        // Upstash/Redis may return different array shapes. We support:
+        // ['OK', decision, amount, winnerRole, winnerUserId, claimExpiresAt]
+        // [<number>, decision, amount, winnerRole, winnerUserId, claimExpiresAt]
+        if (Array.isArray(luaRes)) {
+          const tag0 = luaRes[0];
+          if (tag0 === 'ERR') {
+            console.error('LUA_REWARD returned error', luaRes);
+            throw new Error('lua-reward-error');
+          }
+          const base = (tag0 === 'OK' || typeof tag0 === 'string') ? 1 : 1; // treat first elem as header; skip one
+          const decision = String(luaRes[base + 0] ?? 'none');
+          const amount = Number(luaRes[base + 1] ?? 0) || 0;
+          const winnerRole = String(luaRes[base + 2] ?? '');
+          const winnerUserId = String(luaRes[base + 3] ?? '');
+          const claimExpiresAt = Number(luaRes[base + 4] ?? 0) || 0;
 
-          console.log('[MOVE:reward]', { room, decision, amount, winnerRole, winnerUserId, claimExpiresAt });
+          console.log('[MOVE:reward]', { room, decision, amount, winnerRole, winnerUserId, claimExpiresAt, eff: { X: effx, O: effo }, auth: { X: authx, O: autho } });
 
           if (decision === 'direct' && amount > 0 && winnerUserId) {
-            await db.transaction(async (tx) => {
+            console.log('[MOVE:direct-credit:start]', { room, winnerUserId, amount, reason: `ttt:win:${room}:${winnerSymbol}:${turn}` });
+            const newBal = await db.transaction(async (tx) => {
               const current = (
                 await tx.select().from(wallets).where(eq(wallets.userId, winnerUserId)).limit(1)
               )[0];
-              const newBal = (current?.balance ?? 0) + amount;
+              const nextBalance = (current?.balance ?? 0) + amount;
               if (!current) {
-                await tx.insert(wallets).values({ userId: winnerUserId, balance: newBal });
+                await tx.insert(wallets).values({ userId: winnerUserId, balance: nextBalance });
               } else {
-                await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, winnerUserId));
+                await tx.update(wallets).set({ balance: nextBalance }).where(eq(wallets.userId, winnerUserId));
               }
               await tx.insert(walletTransactions).values({
                 userId: winnerUserId,
@@ -288,21 +311,44 @@ export async function POST(req: Request) {
                 type: 'earn',
                 reason: `ttt:win:${room}:${winnerSymbol}:${turn}`,
               });
+              return nextBalance;
             });
+            console.log('[MOVE:direct-credit:done]', { room, winnerUserId, newBal });
+            // Notify clients to refresh wallet badge for the winner
+            try {
+              await publishWalletUpdate(winnerUserId, {
+                balance: newBal,
+                delta: amount,
+                reason: `ttt:win:${room}:${winnerSymbol}:${turn}`,
+              });
+              console.log('[MOVE:publish:wallet]', { to: winnerUserId, delta: amount });
+            } catch (e) {
+              console.error('[MOVE:publish:wallet:error]', e);
+            }
           } else if ((decision === 'claim' || decision === 'claim1') && amount > 0) {
             claimObj = { amount, winnerRole: winnerRole as 'X'|'O', expiresAt: claimExpiresAt };
+            console.log('[MOVE:claim:set]', { room, amount, winnerRole, expiresAt: claimExpiresAt });
+          } else {
+            console.log('[MOVE:reward:noop]', { room, decision, amount });
           }
         } else {
-          console.error('LUA_REWARD unexpected result', luaRes);
+          console.error('LUA_REWARD unexpected non-array result', luaRes);
         }
       } catch (e) {
         console.error('Error distributing DaddyCoins rewards (lua)', e);
       }
     }
-    if (claimObj) (state as any).claim = claimObj;
+    if (claimObj) {
+      (state as any).claim = claimObj;
+    }
     // Publish authoritative state to Ably (after computing claim/reward)
     const rest = new Ably.Rest(env.ABLY_API_KEY);
-    await rest.channels.get(`room-${room}`).publish('state', { type: 'state', state });
+    try {
+      await rest.channels.get(`room-${room}`).publish('state', { type: 'state', state });
+      console.log('[MOVE:publish:state]', { room, winner: state.winner, claim: !!claimObj });
+    } catch (e) {
+      console.error('[MOVE:publish:state:error]', e);
+    }
     return NextResponse.json({ ok: true, state, userRole });
   } catch (err) {
     console.error('/api/tictactoe/move error', err);

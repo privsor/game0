@@ -4,6 +4,7 @@ import { getRedis } from "~/server/redis";
 import { db } from "~/server/db";
 import { wallets, walletTransactions } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
+import { publishWalletUpdate } from "~/server/lib/ablyServer";
 
 // POST /api/tictactoe/authping
 // body: { room: string }
@@ -76,25 +77,34 @@ export async function POST(req: Request) {
 
     for (const item of toCharge) {
       if (!item.uid) continue;
-      await db.transaction(async (tx) => {
+      const nextBalance = await db.transaction(async (tx) => {
         const cur = (
           await tx.select().from(wallets).where(eq(wallets.userId, item.uid!)).limit(1)
         )[0];
         const bal = cur?.balance ?? 0;
         if (bal < 1) {
           // Cannot charge now; leave effective flags but skip charge. Could optionally revert eff here.
-          return;
+          return null as number | null;
         }
-        await tx.update(wallets).set({ balance: bal - 1 }).where(eq(wallets.userId, item.uid!));
+        const newBal = bal - 1;
+        await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, item.uid!));
         await tx.insert(walletTransactions).values({
           userId: item.uid!,
           amount: -1,
           type: 'spend',
           reason: `ttt:entry:${room}:${item.who}`,
         });
+        return newBal;
       });
       if (item.who === 'X') chargedx = '1'; else chargedo = '1';
       await (redis as any).hmset(key, { chargedx, chargedo });
+      if (nextBalance !== null) {
+        publishWalletUpdate(item.uid!, {
+          balance: nextBalance as number,
+          delta: -1,
+          reason: `ttt:entry:${room}:${item.who}`,
+        }).catch(() => {});
+      }
     }
 
     await (redis as any).pexpire(key, 24 * 60 * 60 * 1000);

@@ -4,6 +4,7 @@ import { getRedis } from "~/server/redis";
 import { db } from "~/server/db";
 import { wallets, walletTransactions } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
+import { publishWalletUpdate } from "~/server/lib/ablyServer";
 
 // POST /api/tictactoe/claim
 // body: { room: string }
@@ -132,15 +133,15 @@ return {amt,'ok'}
     }
 
     // Credit exactly once with the amount returned by Lua
-    await db.transaction(async (tx) => {
+    const newBal = await db.transaction(async (tx) => {
       const current = (
         await tx.select().from(wallets).where(eq(wallets.userId, userId)).limit(1)
       )[0];
-      const newBal = (current?.balance ?? 0) + amtFromLua;
+      const nextBalance = (current?.balance ?? 0) + amtFromLua;
       if (!current) {
-        await tx.insert(wallets).values({ userId, balance: newBal });
+        await tx.insert(wallets).values({ userId, balance: nextBalance });
       } else {
-        await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, userId));
+        await tx.update(wallets).set({ balance: nextBalance }).where(eq(wallets.userId, userId));
       }
       await tx.insert(walletTransactions).values({
         userId,
@@ -148,7 +149,15 @@ return {amt,'ok'}
         type: 'earn',
         reason: `ttt:claim:${room}:${claimWinnerRole || userRole || ''}`,
       });
+      return nextBalance;
     });
+
+    // Notify clients to refresh wallet badge
+    publishWalletUpdate(userId, {
+      balance: newBal,
+      delta: amtFromLua,
+      reason: `ttt:claim:${room}:${claimWinnerRole || userRole || ''}`,
+    }).catch(() => {});
 
     return NextResponse.json({ ok: true, settled: true, amount: amtFromLua });
   } catch (e) {

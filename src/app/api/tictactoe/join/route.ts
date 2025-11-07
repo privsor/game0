@@ -6,6 +6,7 @@ import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 import { wallets, walletTransactions } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
+import { publishWalletUpdate } from "~/server/lib/ablyServer";
 
 // Join contract:
 // POST /api/tictactoe/join
@@ -256,7 +257,7 @@ export async function POST(req: Request) {
         for (const charge of toCharge) {
           if (!charge.userId) continue;
           // Deduct -1 from wallet
-          await db.transaction(async (tx) => {
+          const nextBalance = await db.transaction(async (tx) => {
             const cur = (
               await tx.select().from(wallets).where(eq(wallets.userId, charge.userId!)).limit(1)
             )[0];
@@ -265,15 +266,17 @@ export async function POST(req: Request) {
               // Not enough funds: revert effective flag to 0
               if (charge.who === 'X') { await (redis as any).hmset(key, { effx: '0' }); _effx = '0'; }
               if (charge.who === 'O') { await (redis as any).hmset(key, { effo: '0' }); _effo = '0'; }
-              return; // skip credit
+              return null as number | null; // skip credit
             }
-            await tx.update(wallets).set({ balance: bal - 1 }).where(eq(wallets.userId, charge.userId!));
+            const newBal = bal - 1;
+            await tx.update(wallets).set({ balance: newBal }).where(eq(wallets.userId, charge.userId!));
             await tx.insert(walletTransactions).values({
               userId: charge.userId!,
               amount: -1,
               type: 'spend',
               reason: `ttt:entry:${room}:${charge.who}`,
             });
+            return newBal;
           });
           // mark charged
           if (charge.who === 'X') { await (redis as any).hmset(key, { chargedx: '1' }); _chargedx = '1'; }
@@ -281,6 +284,14 @@ export async function POST(req: Request) {
           try {
             console.log('[JOIN:charged]', { room, who: charge.who, userId: charge.userId });
           } catch {}
+          // Notify client(s) about updated balance via Ably (if charge succeeded)
+          if (nextBalance !== null) {
+            publishWalletUpdate(charge.userId!, {
+              balance: nextBalance as number,
+              delta: -1,
+              reason: `ttt:entry:${room}:${charge.who}`,
+            }).catch(() => {});
+          }
         }
       }
     }
