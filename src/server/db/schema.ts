@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { index, pgTableCreator, primaryKey } from "drizzle-orm/pg-core";
+import { index, pgTableCreator, primaryKey, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AdapterAccount } from "next-auth/adapters";
 
 /**
@@ -31,22 +31,28 @@ export const posts = createTable(
 	],
 );
 
-export const users = createTable("user", (d) => ({
-	id: d
-		.varchar({ length: 255 })
-		.notNull()
-		.primaryKey()
-		.$defaultFn(() => crypto.randomUUID()),
-	name: d.varchar({ length: 255 }),
-	email: d.varchar({ length: 255 }).notNull(),
-	emailVerified: d
-		.timestamp({
-			mode: "date",
-			withTimezone: true,
-		})
-		.default(sql`CURRENT_TIMESTAMP`),
-	image: d.varchar({ length: 255 }),
-}));
+export const users = createTable(
+	"user",
+	(d) => ({
+		id: d
+			.varchar({ length: 255 })
+			.notNull()
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		name: d.varchar({ length: 255 }),
+		email: d.varchar({ length: 255 }).notNull(),
+		// For Credentials provider
+		passwordHash: d.varchar({ length: 255 }),
+		emailVerified: d
+			.timestamp({
+				mode: "date",
+				withTimezone: true,
+			})
+			.default(sql`CURRENT_TIMESTAMP`),
+		image: d.varchar({ length: 255 }),
+	}),
+	(t) => [uniqueIndex("user_email_unique").on(t.email)]
+);
 
 export const usersRelations = relations(users, ({ many }) => ({
 	accounts: many(accounts),
@@ -106,6 +112,9 @@ export const verificationTokens = createTable(
 	}),
 	(t) => [primaryKey({ columns: [t.identifier, t.token] })],
 );
+
+// Helpful indexes/constraints
+ 
 
 // DADDY COINS & GIFTS
 
