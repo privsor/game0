@@ -52,7 +52,7 @@ export default function GameClient() {
   const [peers, setPeers] = useState(0);
   const [showJoin, setShowJoin] = useState(false);
   const [joinName, setJoinName] = useState("");
-  const [joinMode, setJoinMode] = useState<'daddy'|'free'>('free');
+  const [joinMode, setJoinMode] = useState<'daddy'|'free'|null>(null);
   const socialCallbackUrl = `/tictactoe?room=${roomCode}`;
   const joinPromptedRef = useRef(false);
   const [joining, setJoining] = useState(false);
@@ -528,6 +528,10 @@ export default function GameClient() {
   // Join helper inside component scope
   const joinAs = useCallback(async (preferredRole: Role | 'auto') => {
     if (!roomCode || !userId || joining) return;
+    if (!joinMode) { // ensure a mode is chosen
+      setShowJoin(true);
+      return;
+    }
     setJoining(true);
     // Persist name immediately for better UX
     try { localStorage.setItem('ttt-name', joinName); } catch {}
@@ -725,6 +729,8 @@ export default function GameClient() {
           canSelectDaddy={canSelectDaddy}
           joinMode={joinMode}
           setJoinMode={setJoinMode}
+          daddyCoins={myBalance}
+          onBuyDaddyCoins={() => router.push('/profile')}
           joinName={joinName}
           setJoinName={setJoinName}
           joining={joining}
