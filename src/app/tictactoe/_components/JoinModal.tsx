@@ -202,7 +202,7 @@ function JoinModalImpl(props: JoinModalProps) {
             ) : (
               <>
                 {/* <p className="text-white/70 mb-4">Join quickly with an account, or continue without one.</p> */}
-                <AuthButtons socialCallbackUrl={socialCallbackUrl} variant="continue" guestMode={guestMode} onToggleGuest={() => setGuestMode(v => !v)} />
+                <AuthButtons socialCallbackUrl={socialCallbackUrl} variant="join" guestMode={guestMode} onToggleGuest={() => setGuestMode(v => !v)} />
                 {guestMode ? (
                   <>
                     <Divider label="or join without account" />

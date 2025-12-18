@@ -81,8 +81,8 @@ export default function GiftsClient() {
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-8 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Daddy's Gifts for Winners</h1>
-          {/* <p className="text-white/60">Spend your Daddy Coins to unlock epic gifts and vouchers.</p> */}
+          <h1 className="text-2xl font-extrabold tracking-tight">Daddy's Prizes</h1>
+          <p className="text-white/60">Spend your Daddy Coins here!!</p>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/5 px-2 md:px-4 py-2 text-right">
           <div className="md:text-xs text-[7px] uppercase text-white/50">Daddy Coins</div>

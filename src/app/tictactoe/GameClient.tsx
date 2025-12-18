@@ -575,6 +575,7 @@ export default function GameClient() {
         room={roomCode}
         claim={state.claim ?? null}
         opponentName={role === 'X' ? state.names?.O : role === 'O' ? state.names?.X : (state.names?.X || state.names?.O || null)}
+        opponentAvatar={role === 'X' ? state.avatars?.O : role === 'O' ? state.avatars?.X : (state.avatars?.X || state.avatars?.O || null)}
       />
       <div className="w-full h-full flex items-center justify-center">
         <div className="w-full max-w-xl">

@@ -100,10 +100,10 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
         </div>
 
         {/* Deals rotator */}
-        <div className="mt-3">
-          <div className="text-xs text-slate-300/90">Top Prizes in Daddy Mode</div>
-          <div className="mt-1 flex flex-col items-center gap-2 text-xs text-slate-200">
-            <span className="font-medium text-slate-100">Apple iPhone 17 Pro Max</span>
+        <div className="mt-2">
+          <div className="text-md text-slate-300/90">Top Prizes in Daddy Mode</div>
+          <div className="mt-1 flex flex-col items-center border text-xs text-slate-200">
+            <span className="font-medium text-white text-lg animate-pulse">Apple iPhone 17 Pro Max</span>
             <DealsRotator />
           </div>
         </div>
@@ -111,7 +111,7 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
 
       {/* Non-session nudge */}
       {!isAuthed ? (
-        <div className="mt-3 text-[11px] text-slate-300">Join with a social to activate this.</div>
+        <div className="mt-3 text-[11px] text-center text-slate-300">Join with a social account to activate this.</div>
       ) : null}
 
       {/* Low-balance */}

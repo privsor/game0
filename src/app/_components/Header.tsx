@@ -22,8 +22,8 @@ export default function Header({ signedIn }: { signedIn: boolean }) {
             Tic Tac Toe
           </Link>
           <span className="hidden text-white/30 md:inline">|</span>
-          <Link href="/gifts" className="text-white/80 hover:text-white">
-            Daddy's Gifts
+          <Link href="/prizes" className="text-white/80 hover:text-white">
+            Daddy's Prizes
           </Link>
           <span className="hidden text-white/30 md:inline">|</span>
           <Link href="/daddycoins" className="text-white/80 hover:text-white">
@@ -66,8 +66,8 @@ export default function Header({ signedIn }: { signedIn: boolean }) {
             <Link href="/tictactoe" className="text-white/80 hover:text-white" onClick={() => setOpen(false)}>
               Tic Tac Toe
             </Link>
-            <Link href="/gifts" className="text-white/80 hover:text-white" onClick={() => setOpen(false)}>
-              Daddy's Gifts
+            <Link href="/prizes" className="text-white/80 hover:text-white" onClick={() => setOpen(false)}>
+              Daddy's Prizes
             </Link>
             <Link href="/daddycoins" className="text-white/80 hover:text-white" onClick={() => setOpen(false)}>
               Buy DaddyCoins
