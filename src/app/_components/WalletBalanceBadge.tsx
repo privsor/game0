@@ -9,8 +9,8 @@ import { getChannel } from "~/lib/ably";
 
 export default function WalletBalanceBadge() {
   const utils = api.useUtils();
-  const { data, isLoading } = api.wallet.getBalance.useQuery();
   const { data: session } = useSession();
+  const { data, isLoading } = api.wallet.getBalance.useQuery(undefined, { enabled: !!session });
   
   useEffect(() => {
     const userId = session?.user?.id;

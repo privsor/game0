@@ -14,6 +14,9 @@ const config = {
       { protocol: "https", hostname: "media.discordapp.net" },
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "m.media-amazon.com" },
+      { protocol: "https", hostname: "images.macrumors.com" },
+      { protocol: "https", hostname: "store.storeimages.cdn-apple.com" },
+      { protocol: "https", hostname: "fbi.cults3d.com" },
     ],
   },
 };

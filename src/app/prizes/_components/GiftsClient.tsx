@@ -3,17 +3,26 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { api } from "~/trpc/react";
+import { useSession } from "next-auth/react";
 
 export default function GiftsClient() {
-  const { data: balanceData, refetch: refetchBalance, isLoading: isBalLoading } = api.wallet.getBalance.useQuery();
-  const { data: gifts, isLoading: isGiftsLoading, refetch: refetchGifts } = api.gifts.listActive.useQuery();
-  const { data: purchases, refetch: refetchPurchases, isLoading: isPurchLoading } = api.gifts.myPurchases.useQuery();
+  const { data: session } = useSession();
+  const { data: balanceData, refetch: refetchBalance, isLoading: isBalLoading } = api.wallet.getBalance.useQuery(undefined, { enabled: !!session });
+  const { data: variants, isLoading: isVariantsLoading, refetch: refetchVariants } = api.prizes.listActiveVariants.useQuery();
+  const { data: purchases, refetch: refetchPurchases, isLoading: isPurchLoading } = api.gifts.myPurchases.useQuery(undefined, { enabled: !!session });
   const purchaseMutation = api.wallet.purchase.useMutation();
   const addGiftMutation = api.gifts.add.useMutation();
 
   const purchaseMap = useMemo(() => {
     const map = new Map<number, { redemptionCode: string }>();
-    (purchases ?? []).forEach((p) => map.set(p.giftId as number, { redemptionCode: p.redemptionCode as string }));
+    (purchases ?? []).forEach((p) => {
+      if (p.prizeVariantId) {
+        map.set(p.prizeVariantId as number, { redemptionCode: p.redemptionCode as string });
+      } else if (p.giftId) {
+        // legacy fallback
+        map.set(p.giftId as number, { redemptionCode: p.redemptionCode as string });
+      }
+    });
     return map;
   }, [purchases]);
 
@@ -59,10 +68,10 @@ export default function GiftsClient() {
 //     }
 //   };
 
-  const handlePurchase = async (giftId: number) => {
+  const handlePurchase = async (prizeVariantId: number) => {
     try {
-      const res = await purchaseMutation.mutateAsync({ giftId });
-      await Promise.all([refetchBalance(), refetchPurchases()]);
+      const res = await purchaseMutation.mutateAsync({ prizeVariantId } as any);
+      await Promise.all([refetchBalance(), refetchPurchases(), refetchVariants()]);
       const code = res?.purchase?.redemptionCode;
       if (code) {
         alert(`Unlocked! Your voucher code: ${code}`);
@@ -75,7 +84,7 @@ export default function GiftsClient() {
   };
 
   const balance = balanceData?.balance ?? 0;
-  const loading = isBalLoading || isGiftsLoading || isPurchLoading || purchaseMutation.isPending;
+  const loading = isBalLoading || isVariantsLoading || isPurchLoading || purchaseMutation.isPending;
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -108,41 +117,44 @@ export default function GiftsClient() {
       )} */}
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {(gifts ?? []).map((g) => {
-          const unlocked = purchaseMap.has(g.id as number);
-          const code = purchaseMap.get(g.id as number)?.redemptionCode;
-          const canAfford = balance >= (g.coinCost as number);
+        {(variants ?? []).map((v: any) => {
+          const unlocked = purchaseMap.has(v.id as number);
+          const code = purchaseMap.get(v.id as number)?.redemptionCode;
+          const canAfford = balance >= (v.coinCost as number);
           return (
-            <div key={g.id as number} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+            <div key={v.id as number} className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
               <div
                 className="relative h-44 w-full bg-black"
-                onMouseEnter={() => setHoveredId(g.id as number)}
-                onMouseLeave={() => setHoveredId((id) => (id === g.id ? null : id))}
+                onMouseEnter={() => setHoveredId(v.id as number)}
+                onMouseLeave={() => setHoveredId((id) => (id === v.id ? null : id))}
               >
-                {g.videoUrl && hoveredId === (g.id as number) ? (
+                {v.videoUrl && hoveredId === (v.id as number) ? (
                   <video
-                    src={g.videoUrl as string}
+                    src={v.videoUrl as string}
                     className="h-full w-full object-cover"
                     autoPlay
                     muted
                     loop
                     playsInline
                   />
-                ) : g.imageUrl ? (
-                  <Image src={g.imageUrl as string} alt={g.title as string} fill className="object-cover" />
+                ) : v.imageUrl ? (
+                  <Image src={v.imageUrl as string} alt={v.title as string} fill className="object-cover" />
                 ) : (
                   <div className="flex h-full items-center justify-center text-white/40">No Image</div>
                 )}
                 <div className="absolute right-2 top-2 rounded-full bg-black/70 px-2 py-1 text-xs text-white/80">
-                  {g.vendor}
+                  {v.vendor}
                 </div>
               </div>
               <div className="space-y-3 p-4">
-                <div className="font-semibold">{g.title}</div>
+                <div className="font-semibold">{v.title}</div>
+                {v.label && (
+                  <div className="text-xs text-white/60">{v.label}</div>
+                )}
                 <div className="flex items-center justify-between text-sm">
                   <div className="text-white/70">Cost</div>
                   <div className="font-semibold inline-flex items-center gap-1.5">
-                    {g.coinCost}
+                    {v.coinCost}
                     <Image src="/daddycoin.svg" width={18} height={18} alt="DaddyCoins" />
                   </div>
                 </div>
@@ -151,7 +163,7 @@ export default function GiftsClient() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-white/60">Voucher sealed</div>
                       <button
-                        onClick={() => handlePurchase(g.id as number)}
+                        onClick={() => handlePurchase(v.id as number)}
                         disabled={!canAfford || loading}
                         className="rounded-md bg-white px-3 py-1.5 text-black hover:bg-white/90 disabled:opacity-50"
                       >

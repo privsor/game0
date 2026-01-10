@@ -1,6 +1,7 @@
 import { postRouter } from "~/server/api/routers/post";
 import { walletRouter } from "~/server/api/routers/wallet";
 import { giftsRouter } from "~/server/api/routers/gifts";
+import { prizesRouter } from "~/server/api/routers/prizes";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -12,6 +13,7 @@ export const appRouter = createTRPCRouter({
 	post: postRouter,
 	wallet: walletRouter,
 	gifts: giftsRouter,
+	prizes: prizesRouter,
 });
 
 // export type definition of API

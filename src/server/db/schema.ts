@@ -199,6 +199,116 @@ export const giftsRelations = relations(gifts, ({ many }) => ({
 	purchases: many(purchases),
 }));
 
+// Generalized Prizes (Products) and Variants (Purchasable options/tiers)
+export const prizes = createTable(
+	"prize",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		title: d.varchar({ length: 255 }).notNull(),
+		description: d.text(),
+		imageUrl: d.text(),
+		videoUrl: d.text(),
+		// Primary image and flexible media gallery (images/videos)
+		primaryImageUrl: d.text(),
+		media: d
+			.jsonb()
+			.$type<Array<{ type: "image" | "video"; url: string; alt?: string; sortOrder?: number }>>(),
+		vendor: d.varchar({ length: 64 }).default("generic"),
+		// Optional vendor logo to display in PrizeCard
+		vendorLogo: d.text(),
+		active: d.integer().notNull().default(1),
+		metadata: d.jsonb(),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+		updatedAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.$onUpdate(() => new Date()),
+	}),
+	(t) => [index("prize_active_idx").on(t.active)],
+);
+
+export const prizeVariants = createTable(
+	"prize_variant",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		prizeId: d
+			.integer()
+			.notNull()
+			.references(() => prizes.id),
+		label: d.varchar({ length: 255 }).notNull(),
+		// Optional short label for buttons
+		buttonLabel: d.varchar({ length: 64 }),
+		coinCost: d.integer().notNull(),
+		sku: d.varchar({ length: 64 }),
+		sortOrder: d.integer().notNull().default(0),
+		active: d.integer().notNull().default(1),
+		fulfillmentType: d.varchar({ length: 64 }),
+		fulfillmentConfig: d.jsonb(),
+		// Optional variant-specific media
+		primaryImageUrl: d.text(),
+		media: d
+			.jsonb()
+			.$type<Array<{ type: "image" | "video"; url: string; alt?: string; sortOrder?: number }>>(),
+		metadata: d.jsonb(),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+		updatedAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.$onUpdate(() => new Date()),
+	}),
+	(t) => [
+		index("prize_variant_prize_id_idx").on(t.prizeId),
+		index("prize_variant_active_idx").on(t.active),
+		index("prize_variant_sort_idx").on(t.sortOrder),
+	],
+);
+
+export const prizesRelations = relations(prizes, ({ many }) => ({
+	variants: many(prizeVariants),
+}));
+
+export const prizeVariantsRelations = relations(prizeVariants, ({ one }) => ({
+	prize: one(prizes, { fields: [prizeVariants.prizeId], references: [prizes.id] }),
+}));
+
+// Interaction tables
+export const prizeWants = createTable(
+	"prize_want",
+	(d) => ({
+		userId: d.varchar({ length: 255 }).notNull().references(() => users.id),
+		prizeId: d.integer().notNull().references(() => prizes.id),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+	}),
+	(t) => [
+		primaryKey({ columns: [t.userId, t.prizeId] }),
+		index("prize_want_prize_idx").on(t.prizeId),
+	],
+);
+
+export const prizeComments = createTable(
+	"prize_comment",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		userId: d.varchar({ length: 255 }).notNull().references(() => users.id),
+		prizeId: d.integer().notNull().references(() => prizes.id),
+		text: d.text().notNull(),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+	}),
+	(t) => [index("prize_comment_prize_idx").on(t.prizeId)],
+);
+
 // Purchases connect users to gifts and store redemption data
 export const purchases = createTable(
 	"purchase",
@@ -210,8 +320,9 @@ export const purchases = createTable(
 			.references(() => users.id),
 		giftId: d
 			.integer()
-			.notNull()
 			.references(() => gifts.id),
+		// Optionally reference a specific prize variant in the generalized schema
+		prizeVariantId: d.integer().references(() => prizeVariants.id),
 		redemptionCode: d.varchar({ length: 255 }), // revealed upon purchase
 		createdAt: d
 			.timestamp({ withTimezone: true })
@@ -221,10 +332,12 @@ export const purchases = createTable(
 	(t) => [
 		index("purchase_user_id_idx").on(t.userId),
 		index("purchase_gift_id_idx").on(t.giftId),
+		index("purchase_variant_id_idx").on(t.prizeVariantId),
 	],
 );
 
 export const purchasesRelations = relations(purchases, ({ one }) => ({
 	user: one(users, { fields: [purchases.userId], references: [users.id] }),
 	gift: one(gifts, { fields: [purchases.giftId], references: [gifts.id] }),
+	variant: one(prizeVariants, { fields: [purchases.prizeVariantId], references: [prizeVariants.id] }),
 }));

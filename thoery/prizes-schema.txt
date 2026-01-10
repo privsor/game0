@@ -1,0 +1,254 @@
+To propose an accurate schema update, I want to review the full 
+schema.ts
+ to see existing related tables (e.g., purchases, code pools) and naming conventions around "gifts" and wallet transactions. I'll open the file outline and relevant portions.
+
+Analyzed
+
+schema.ts
+Thought Process
+
+
+
+
+
+
+Great idea to discuss first. Here’s a concise proposal to support “prizes” with multiple discount voucher tiers, while keeping things backward-compatible and easy to migrate.
+
+Current state
+
+Table gifts is your prize catalog with one purchasable per row: title, imageUrl, videoUrl, coinCost, vendor, voucherAmount, active.
+purchases points to a giftId and stores a redemptionCode.
+Frontend callers today expect a flat list of purchasables (see 
+src/app/prizes/_components/GiftsClient.tsx
+) and call api.gifts.listActive, api.wallet.purchase({ giftId }).
+What we need
+
+A prize (e.g., “iPhone 17 Pro Max”) should have multiple voucher options (e.g., 100%, 75%, 50%, 25%) with their own coin costs.
+Each option may require its own code pool or redemption mechanism.
+Keep wallet accounting and purchases clear and auditable.
+Proposed data model changes
+
+Rename conceptually to “prizes”, but we can keep the table name gifts for now to avoid a big refactor across the API/routes. We can introduce new tables and migrate later.
+prizes table
+Keep existing gifts as the “prizes” table.
+Minimal change: still stores product-level metadata.
+id, title, imageUrl, videoUrl, vendor, createdAt/updatedAt, active
+Remove coinCost/voucherAmount from this level conceptually (keep for migration but deprecate), since options will carry price.
+prize_options table (new)
+Represents each purchasable option/tier for a prize.
+Fields:
+id (PK)
+prizeId (FK to gifts.id)
+label (e.g., "100% discount voucher", "75% discount voucher")
+coinCost (required)
+discountPercent (nullable int; e.g., 100, 75, 50, 25) or discountType/value fields if you need flexibility
+voucherAmount (nullable int; for fixed-value vendor vouchers)
+active (boolean/int)
+stock (nullable int; if you want to limit quantity per option)
+sortOrder (int; for UI ordering)
+createdAt, updatedAt
+Indexes: prizeId, active, sortOrder
+voucher_codes table (new, optional but recommended)
+For pre-generated or allocated codes per option.
+Fields:
+id (PK)
+optionId (FK to prize_options.id)
+code (unique)
+allocated (boolean) or claimedAt nullable timestamp
+purchaseId (nullable FK to purchases.id) after allocation
+createdAt, claimedAt
+Indexes: optionId, (optionId, allocated), code unique
+purchases changes
+Add optionId (FK to prize_options.id), keep giftId for easy reporting but make optionId required moving forward.
+Keep redemptionCode (some flows won’t use pre-generated pool and can generate on the fly).
+Purchase should always have either a redemptionCode or a link to a voucher_codes row with the code.
+Indexes: userId, giftId, optionId.
+Compatibility and migration strategy
+
+Phase 0: No breaking changes to frontend or API names.
+Phase 1: Add prize_options and voucher_codes tables. Backfill options:
+For each existing gift row, create one default option with:
+label = gift.title (or “Default”)
+coinCost = gifts.coinCost
+voucherAmount = gifts.voucherAmount
+active mirrors gift.active
+Add optionId to existing purchases (nullable), then backfill to point to the default option derived above.
+Phase 2: Update API behavior behind the scenes:
+listActive: either
+return flattened options as items (each option looks like a “gift” with added label), OR
+group by prize with nested options[] if you plan to update the UI soon.
+purchase: accept either giftId+optionId (preferred) or just giftId (map to default option). Preserve the current purchase({ giftId }) call path by mapping to default option if optionId is not provided.
+Phase 3: UI
+GiftsClient.tsx
+ can stay as-is if we flatten options and expose each option as a separate purchasable “card”. The card title could be prize.title and subtitle/badge option.label so users see tiers distinctly.
+Alternatively, update the UI to show a prize with multiple selectable options in a modal/grid.
+Phase 4: Optional rename
+Rename tables/routes to “prizes” in code later, with an alias or a focused refactor.
+Notes on redemptions
+
+If you will use pre-generated codes, do “allocate on purchase”:
+Transactionally pick the earliest unallocated code in voucher_codes for that option, mark it allocated, attach purchaseId; also create the wallet spend txn and purchase row.
+If you will generate codes on-the-fly, keep using redemptionCode on purchases and skip voucher_codes.
+Open questions for you
+
+Do you want the list UI to:
+A) show each option as its own card (no UI change needed; we’ll change the API to flatten), or
+B) show a single prize with selectable options (requires some frontend changes)?
+Will you use code pools per option (voucher_codes), or keep generating codes on purchase?
+Do you want to track stock per option?
+Any other option attributes needed? Examples: currency for voucherAmount, region restrictions, expiration date, terms URL.
+If you confirm the direction (especially A vs B), I’ll draft the exact schema changes and an incremental migration plan to avoid downtime or breaking routes.
+
+Feedback submitted
+Me
+
+i mean this is actually varients of prizes (analogy to product) right? so the structure could be more simple and general?
+
+Revert
+Yes—thinking of “prize” as a product and “voucher tiers” as variants is the right mental model. We can make this simple and general without overfitting to discounts.
+
+Proposed minimal, general structure
+
+prizes
+id (PK)
+title
+imageUrl, videoUrl
+vendor
+active
+createdAt, updatedAt
+prize_variants
+id (PK)
+prizeId (FK → prizes.id)
+label (e.g., “100% discount voucher”, “75% discount voucher”)
+coinCost (required)
+sku (optional, for tracking)
+sortOrder (int, optional)
+active
+metadata jsonb (optional, general-purpose for variant specifics)
+Example: { "discountPercent": 75, "voucherAmount": 100, "currency": "USD", "type": "discount|amount|other" }
+createdAt, updatedAt
+purchases
+id (PK)
+userId (FK → users.id)
+prizeVariantId (FK → prize_variants.id)
+redemptionCode (nullable string; supports generated-on-purchase)
+createdAt
+Notes on why this is simpler and more general
+
+Variants are first-class purchasables with their own price, which maps perfectly to your UI tiers.
+Keep everything else about the “product” (media/vendor name) at the prizes level.
+metadata on prize_variants avoids schema churn when you introduce new kinds of variant attributes (discounts, fixed-amount, region, expiry).
+Purchases point to the variant directly—unambiguous and more audit-friendly.
+Optional later (only if/when needed)
+
+voucher_codes: If you want pre-generated code pools or stock per variant in a robust way.
+You can defer this until you actually need it. For now, redemptionCode on purchases is enough.
+Migration and compatibility
+
+Keep the existing gifts table as prizes source.
+Either rename later, or keep the table name “gift” and add a prize_variants table.
+Backfill variants:
+For each existing gift, create a single variant (label “Default”) with coinCost = gift.coinCost and metadata.voucherAmount = gift.voucherAmount.
+Add prizeVariantId to purchases (nullable), then backfill to the default variant.
+API behavior:
+listActive can either:
+Return flattened variants (simple drop-in: your 
+GiftsClient.tsx
+ can stay basically the same if we surface variant properties as the item), or
+Return prizes with nested variants if you plan to present options inside a single card.
+purchase({ giftId }) can map to the default variant for backward-compatibility; new flow supports purchase({ prizeVariantId }).
+Questions for you to finalize
+
+UI shape preference:
+A) Flattened variants (each variant is a card; minimal frontend changes), or
+B) One prize card with variant selection (cleaner UX, small UI change).
+Are you okay with metadata jsonb on variants to keep the schema future-proof?
+Keep table names as-is (gifts → prizes conceptually) for now, or do you want to actually rename now?
+Once you confirm A/B and metadata usage, I’ll draft the exact schema diffs and a safe migration plan.
+
+Feedback submitted
+Me
+
+so this could be the most general schema for prizes eh? even if the prizes are phyiscal or digital products, subscriptions, travel or tour packages etc?
+
+Revert
+Short answer: yes—with a tiny bit of structure around “fulfillment,” the product+variant model will stay general for physical, digital, subscriptions, travel, etc.
+
+Here’s a clean, general, future‑proof shape you can adopt, while keeping today’s coins-only economy and current APIs compatible.
+
+Core entities
+
+prizes (product)
+id, title, description
+imageUrl, videoUrl
+vendor
+active
+createdAt, updatedAt
+metadata jsonb (optional; global attributes like category, tags, region constraints)
+prize_variants (purchasable options/tiers)
+id
+prizeId → prizes.id
+label (e.g., “100% voucher”, “75% voucher”, “12‑month plan”)
+coinCost
+sku (optional)
+sortOrder (int)
+active
+fulfillmentType (enum)
+"digital_code" | "shipment" | "booking" | "subscription_activation" | "manual"
+fulfillmentConfig jsonb
+digital_code: { provider: "amazon", codePool: true }
+shipment: { weight, dimensions, requiresAddress: true, carrierHint }
+booking: { partner: "acme_tours", needsScheduling: true }
+subscription_activation: { provider: "spotify", plan: "12m" }
+metadata jsonb (variant specifics like { discountPercent, voucherAmount, currency, termsUrl, expiresAt })
+createdAt, updatedAt
+purchases
+id
+userId → users.id
+prizeVariantId → prize_variants.id
+status (enum: "pending" | "fulfilled" | "failed" | "canceled")
+redemptionCode (nullable; for generated-on-purchase digital codes)
+fulfillmentData jsonb (stores outcome)
+digital_code: { code, claimedAt }
+shipment: { name, address, trackingId, shippedAt, deliveredAt }
+booking: { bookingRef, startAt, endAt }
+subscription_activation: { account, startedAt, endsAt }
+manual: { notes }
+createdAt, updatedAt
+Optional, plug-in tables (only when needed)
+
+voucher_codes (for pre-generated code pools per variant)
+id, variantId, code (unique), allocatedAt, purchaseId (nullable), claimedAt
+status/flags and indices by (variantId, allocatedAt is null)
+inventory (for physical stock control)
+variantId, stock, reserved, backorderable
+per-user limits / rate limits
+variantId, perUserLimit, window
+Why this stays general
+
+Variants carry pricing and the “how to fulfill” via fulfillmentType + fulfillmentConfig.
+You can add new prize types by introducing a new fulfillmentType and its config.
+You can model discounts, fixed-amount vouchers, region/currency, validity windows, and terms in metadata—no schema churn.
+Purchases always point to a variant (the SKU) and record the fulfillment outcome uniformly.
+How your current UI/APIs fit
+
+Keep table names as-is in code for now (your gift table ≈ prizes).
+Add prize_variants and a nullable prizeVariantId to purchases, backfill a “Default” variant for existing rows.
+API shape options:
+Flattened variants: return each variant as a card (minimal/no UI changes in 
+GiftsClient.tsx
+; title from prize, price from variant, label as badge).
+Grouped: return prize with variants[] for a richer selector later.
+For DaddyMode’s rotating voucher tiers, you just add variants with labels “100%/75%/50%/25% discount voucher” and set coinCost per tier.
+Practical extras to consider (easy additions)
+
+per-user purchase limit per variant (e.g., limit 1 per week).
+regional/currency fields in metadata if you’ll go multi-region.
+visibleFrom/visibleTo timestamps for scheduled promos.
+termsUrl and expiresAt per variant (esp. for codes, subs, travel).
+Questions for you
+
+Do you prefer flattening variants in the existing list API for a zero-UI-change transition, or grouping with nested variants?
+Will you use pre-generated code pools (voucher_codes) for some variants, or stick to generated-on-purchase for now?
+Do you want per-user limits now (common for high-value prizes)?
+If you confirm flattened vs grouped and whether you want voucher_codes in v1, I’ll draft the exact schema diffs and a safe, incremental migration plan that keeps current routes working.

@@ -36,6 +36,27 @@
       "when": 1764406863091,
       "tag": "0004_great_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1767785426487,
+      "tag": "0005_reflective_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1767786545578,
+      "tag": "0006_orange_tempest",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1768056983042,
+      "tag": "0007_nifty_dorian_gray",
+      "breakpoints": true
     }
   ]
 }

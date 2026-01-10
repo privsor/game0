@@ -1,17 +1,16 @@
 import { HydrateClient, api } from "~/trpc/server";
-import GiftsClient from "./_components/GiftsClient";
+import PrizeClient from "./_components/PrizeClient";
 
 export default async function GiftsPage() {
   // Prefetch initial data for hydration: balance, gifts, and user's purchases
+  // Only prefetch public data; auth-protected data is fetched client-side when authenticated
   await Promise.all([
-    api.wallet.getBalance.prefetch(),
-    api.gifts.listActive.prefetch(),
-    api.gifts.myPurchases.prefetch(),
+    api.prizes.listGrouped.prefetch(),
   ]);
 
   return (
     <HydrateClient>
-      <GiftsClient />
+      <PrizeClient />
     </HydrateClient>
   );
 }

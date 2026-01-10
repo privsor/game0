@@ -57,7 +57,7 @@ export default function DaddyCoinsPage() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
 
-  const { data: balanceData, refetch: refetchBalance } = api.wallet.getBalance.useQuery();
+  const { data: balanceData, refetch: refetchBalance } = api.wallet.getBalance.useQuery(undefined, { enabled: !!session });
   const balance = balanceData?.balance ?? 0;
 
   useEffect(() => {

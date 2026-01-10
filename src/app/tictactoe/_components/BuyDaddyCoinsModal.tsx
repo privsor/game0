@@ -54,7 +54,7 @@ export function BuyDaddyCoinsModal({ open, onClose }: BuyDaddyCoinsModalProps) {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
 
-  const { data: balanceData, refetch: refetchBalance } = api.wallet.getBalance.useQuery(undefined, { enabled: open });
+  const { data: balanceData, refetch: refetchBalance } = api.wallet.getBalance.useQuery(undefined, { enabled: open && !!session });
   const balance = balanceData?.balance ?? 0;
 
   useEffect(() => {
