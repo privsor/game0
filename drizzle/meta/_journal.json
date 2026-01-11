@@ -57,6 +57,20 @@
       "when": 1768056983042,
       "tag": "0007_nifty_dorian_gray",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1768137106596,
+      "tag": "0008_flawless_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1768137967579,
+      "tag": "0009_sloppy_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

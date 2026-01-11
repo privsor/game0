@@ -1,0 +1,1 @@
+ALTER TABLE "game0_prize_comment" DROP CONSTRAINT "game0_prize_comment_parentCommentId_game0_prize_comment_id_fk";

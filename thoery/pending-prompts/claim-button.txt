@@ -1,0 +1,7 @@
+ok now we need to work on the claim button flow for the case when daddycoin balance is not sufficient..
+
+im thinking of a modal that motivates user to play games in daddy mode and earn daddy coins to win the prize claim.. with buttons/cards to games
+
+but right now we only have one game tic tac toe.. but in future we'll have many games.. and "Fake Toe" game is coming soon..
+
+so im not getting any ideas how the modal design must be 

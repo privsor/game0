@@ -17,6 +17,7 @@ const config = {
       { protocol: "https", hostname: "images.macrumors.com" },
       { protocol: "https", hostname: "store.storeimages.cdn-apple.com" },
       { protocol: "https", hostname: "fbi.cults3d.com" },
+      { protocol: "https", hostname: "images.icon-icons.com" },
     ],
   },
 };

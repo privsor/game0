@@ -70,7 +70,7 @@ function Header({ balance, loading }: { balance: number; loading: boolean }) {
   return (
     <div className="mb-8 flex items-end justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Prizes</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">Daddy's Prizes</h1>
         {/* <p className="text-white/60">Choose a variant and claim with Daddy Coins.</p> */}
       </div>
       <div className="rounded-lg border border-white/10 bg-white/5 px-2 md:px-4 py-2 text-right">
@@ -163,7 +163,15 @@ function PrizeCard({
         </div>
         <div className="flex items-center gap-2 text-xs text-white/60">
           <span>Sponsored by:</span>
-          {prize.sponsorLogo ? <Image src={prize.sponsorLogo as string} width={14} height={14} alt="brand" /> : null}
+          {prize.sponsorLogo ? 
+          <Image
+          src={prize.sponsorLogo as string}
+          width={14}
+          height={14}
+          alt="brand"
+          className="grayscale invert brightness-200 contrast-200"
+        />         
+          : null}
           <span className="font-medium text-white/80">{prize.sponsor ?? prize.vendor}</span>
         </div>
 

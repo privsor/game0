@@ -300,13 +300,18 @@ export const prizeComments = createTable(
 		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
 		userId: d.varchar({ length: 255 }).notNull().references(() => users.id),
 		prizeId: d.integer().notNull().references(() => prizes.id),
+		// Note: avoid TS circular type by not referencing prizeComments in its own initializer
+		parentCommentId: d.integer(),
 		text: d.text().notNull(),
 		createdAt: d
 			.timestamp({ withTimezone: true })
 			.default(sql`CURRENT_TIMESTAMP`)
 			.notNull(),
 	}),
-	(t) => [index("prize_comment_prize_idx").on(t.prizeId)],
+	(t) => [
+		index("prize_comment_prize_idx").on(t.prizeId),
+		index("prize_comment_parent_idx").on(t.parentCommentId),
+	],
 );
 
 // Purchases connect users to gifts and store redemption data

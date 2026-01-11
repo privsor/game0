@@ -308,9 +308,9 @@ export const prizesRouter = createTRPCRouter({
     }),
 
   addComment: protectedProcedure
-    .input(z.object({ prizeId: z.number().int().positive(), text: z.string().min(1).max(500) }))
+    .input(z.object({ prizeId: z.number().int().positive(), text: z.string().min(1).max(500), parentCommentId: z.number().int().positive().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const [row] = await ctx.db.insert(prizeComments).values({ prizeId: input.prizeId, userId: ctx.session.user.id, text: input.text }).returning();
+      const [row] = await ctx.db.insert(prizeComments).values({ prizeId: input.prizeId, userId: ctx.session.user.id, text: input.text, parentCommentId: input.parentCommentId }).returning();
       return row;
     }),
 
@@ -323,6 +323,7 @@ export const prizesRouter = createTRPCRouter({
           text: prizeComments.text,
           userId: prizeComments.userId,
           createdAt: prizeComments.createdAt,
+          parentCommentId: prizeComments.parentCommentId,
           userImage: users.image,
           userName: users.name,
         })
