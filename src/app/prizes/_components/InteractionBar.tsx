@@ -67,7 +67,7 @@ export default function InteractionBar({
       </div>
       <div className="flex min-w-0 flex-col">
         <div className="flex items-center gap-0">
-          <span className="relative z-10 mr-0.5 font-semibold leading-none">{count}</span>
+          <span className="relative z-10 mr-1.5 font-semibold leading-none">{count}</span>
           {inlineRight}
         </div>
         <div className="truncate text-xs text-white/70">{label}</div>
