@@ -131,7 +131,7 @@ export default function AdminPrizesClient() {
       active: !!variantForm.active,
       primaryImageUrl: variantForm.primaryImageUrl || undefined,
     } as any);
-    setVariantForm({ prizeId: 0, label: "", coinCost: 0, sku: "", sortOrder: 0, active: true, primaryImageUrl: "" });
+    setVariantForm({ prizeId: 0, label: "", buttonLabel: "", coinCost: 0, sku: "", sortOrder: 0, active: true, primaryImageUrl: "" });
     await refetch();
   };
 
