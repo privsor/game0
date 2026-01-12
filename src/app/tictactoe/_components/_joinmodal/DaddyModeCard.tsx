@@ -138,13 +138,13 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
 
       {/* Low-balance */}
       {isAuthed && daddyCoins <= 0 ? (
-        <div className="mt-3 rounded-md bg-rose-300/10 p-2 text-[11px] text-rose-200 ring-1 ring-inset ring-rose-300/30">
-          <div className="mb-1">You have 0 DaddyCoins.</div>
+        <div className="mt-2 rounded-md flex flex-col items-center justify-center text-[11px]">
+          <div className="mb-1">You have 0 DaddyCoins. Buy some to play in Daddy Mode.</div>
           {onBuyDaddyCoins ? (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onBuyDaddyCoins(); }}
-              className="rounded-md border border-rose-200/60 bg-rose-200 text-rose-900 px-2 py-1 text-xs font-semibold hover:bg-rose-100"
+              className="rounded-md border border-rose-200/5 bg-white text-black px-2 py-1 text-lg font-semibold hover:bg-rose-100"
             >
               Buy Daddy Coins
             </button>
