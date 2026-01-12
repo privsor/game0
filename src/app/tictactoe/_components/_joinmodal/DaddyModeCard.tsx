@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import PrizesModal from "~/app/prizes/_components/PrizesModal";
+
 
 export type DaddyModeCardProps = {
   active: boolean;
@@ -55,6 +57,8 @@ function DealsRotator() {
 
 export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDaddy, daddyCoins, onBuyDaddyCoins }: DaddyModeCardProps) {
   const disabled = !isAuthed || !canSelectDaddy;
+  const [prizesOpen, setPrizesOpen] = React.useState(false);
+  
   return (
     <div
       role="button"
@@ -109,6 +113,16 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
         </div>
       </div>
 
+      <div className="mt-2 mb-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPrizesOpen(true)}
+                className="text-xs rounded border border-white/20 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/10"
+              >
+                View more prizes
+              </button>
+            </div>
+
       {/* Non-session nudge */}
       {!isAuthed ? (
         <div className="mt-3 text-[11px] text-center text-slate-300">Join with a social account to activate this.</div>
@@ -129,6 +143,7 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
           ) : null}
         </div>
       ) : null}
+      <PrizesModal open={prizesOpen} onClose={() => setPrizesOpen(false)} />
     </div>
   );
 }

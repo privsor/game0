@@ -18,7 +18,7 @@ export default function PrizesModal({ open, onClose }: { open: boolean; onClose:
             Close
           </button>
         </div>
-        <div className="overflow-y-auto p-2 md:p-4">
+        <div className="overflow-y-auto p-2 md:p-4 text-left">
           <PrizeClient />
         </div>
       </div>

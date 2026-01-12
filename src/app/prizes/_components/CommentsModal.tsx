@@ -92,7 +92,7 @@ export default function CommentsModal({
         ) : (
           <div className="space-y-3">
             {tree.roots.map((c: any) => (
-              <div key={c.id} className="rounded border border-white/10 bg-white/5 p-2">
+              <div key={c.id} className="rounded border border-white/10 bg-black/5 backdrop-blur-md p-2">
                 <div className="flex items-start gap-2">
                   <img src={(c as any).userImage ?? "/default-avatar.png"} alt={(c as any).userName ?? ""} className="h-7 w-7 rounded-full object-cover" />
                   <div className="min-w-0 flex-1">
