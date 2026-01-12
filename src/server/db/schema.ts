@@ -50,6 +50,8 @@ export const users = createTable(
 			})
 			.default(sql`CURRENT_TIMESTAMP`),
 		image: d.varchar({ length: 255 }),
+		// Flag for admin-created test users
+		isFako: d.boolean().notNull().default(false),
 	}),
 	(t) => [uniqueIndex("user_email_unique").on(t.email)]
 );

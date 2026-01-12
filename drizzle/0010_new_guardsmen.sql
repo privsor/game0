@@ -1,0 +1,1 @@
+ALTER TABLE "game0_user" ADD COLUMN "isFako" boolean DEFAULT false NOT NULL;

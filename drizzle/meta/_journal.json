@@ -71,6 +71,13 @@
       "when": 1768137967579,
       "tag": "0009_sloppy_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1768226526396,
+      "tag": "0010_new_guardsmen",
+      "breakpoints": true
     }
   ]
 }

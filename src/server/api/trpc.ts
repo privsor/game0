@@ -14,6 +14,8 @@ import { ZodError } from "zod";
 import { auth } from "~/server/auth";
 import { env } from "~/env";
 import { db } from "~/server/db";
+import { users } from "~/server/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * 1. CONTEXT
@@ -28,7 +30,49 @@ import { db } from "~/server/db";
  * @see https://trpc.io/docs/server/context
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
-	const session = await auth();
+	let session = await auth();
+
+	// Admin-only fako impersonation via cookie
+	try {
+		const raw = opts.headers.get("cookie") || "";
+		const jar = Object.fromEntries(
+			raw
+				.split(/;\s*/)
+				.filter(Boolean)
+				.map((c) => {
+					const i = c.indexOf("=");
+					const k = i === -1 ? c : c.slice(0, i);
+					const v = i === -1 ? "" : decodeURIComponent(c.slice(i + 1));
+					return [k, v];
+				}),
+		);
+		const fakoUserId = jar["fakoUserId"];
+		if (fakoUserId && session?.user?.email) {
+			const allow = (env.ADMIN_EMAILS ?? "")
+				.split(",")
+				.map((s) => s.trim().toLowerCase())
+				.filter(Boolean);
+			const requester = session.user.email.toLowerCase();
+			if (allow.includes(requester)) {
+				const u = (
+					await db.select().from(users).where(eq(users.id, fakoUserId)).limit(1)
+				)[0];
+				if (u && (u as any).isFako) {
+					// Override effective identity for TRPC handlers
+					session = {
+						...session,
+						user: {
+							...session.user,
+							id: (u as any).id,
+							email: (u as any).email,
+							name: (u as any).name ?? session.user.name,
+							image: (u as any).image ?? session.user.image,
+						},
+					} as any;
+				}
+			}
+		}
+	} catch {}
 
 	return {
 		db,
