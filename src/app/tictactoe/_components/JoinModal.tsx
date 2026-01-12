@@ -5,7 +5,6 @@ import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { ModeSelector } from "./_joinmodal/ModeSelector";
 import BuyDaddyCoinsModal from "./BuyDaddyCoinsModal";
-import PrizesModal from "../../prizes/_components/PrizesModal";
 
 export type Role = "X" | "O";
 
@@ -174,7 +173,6 @@ function JoinModalImpl(props: JoinModalProps) {
   const disableJoin = joining || !modeSelected || daddyBlocked;
   const [toastMsg, setToastMsg] = React.useState<string | null>(null);
   const [buyOpen, setBuyOpen] = React.useState(false);
-  const [prizesOpen, setPrizesOpen] = React.useState(false);
 
   const handleAttemptJoin = (roleHandler: () => void) => {
     if (joining) return;
@@ -232,15 +230,6 @@ function JoinModalImpl(props: JoinModalProps) {
               onBuyDaddyCoins={() => setBuyOpen(true)}
               onAuthCta={() => signIn()}
             />
-            <div className="mt-2 mb-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setPrizesOpen(true)}
-                className="text-xs rounded border border-white/20 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/10"
-              >
-                View more prizes
-              </button>
-            </div>
             <div className="flex gap-3 justify-end">
               <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Cancel</button>
               <button
@@ -302,15 +291,6 @@ function JoinModalImpl(props: JoinModalProps) {
               onBuyDaddyCoins={() => setBuyOpen(true)}
               onAuthCta={() => signIn()}
             />
-            <div className="mt-2 mb-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setPrizesOpen(true)}
-                className="text-xs rounded border border-white/20 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/10"
-              >
-                View more prizes
-              </button>
-            </div>
 
             <div className="flex gap-3 justify-between">
               <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
@@ -337,7 +317,6 @@ function JoinModalImpl(props: JoinModalProps) {
       </div>
       {toastMsg ? <Toast message={toastMsg} onClose={() => setToastMsg(null)} /> : null}
       <BuyDaddyCoinsModal open={buyOpen} onClose={() => setBuyOpen(false)} />
-      <PrizesModal open={prizesOpen} onClose={() => setPrizesOpen(false)} />
     </div>
   );
 }

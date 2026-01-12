@@ -2,8 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import PrizesModal from "~/app/prizes/_components/PrizesModal";
-
+import PrizesModal from "../../../prizes/_components/PrizesModal";
 
 export type DaddyModeCardProps = {
   active: boolean;
@@ -57,9 +56,9 @@ function DealsRotator() {
 
 export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDaddy, daddyCoins, onBuyDaddyCoins }: DaddyModeCardProps) {
   const disabled = !isAuthed || !canSelectDaddy;
-  const [prizesOpen, setPrizesOpen] = React.useState(false);
-  
+  const [prizesOpen, setPrizesOpen] = useState(false);
   return (
+    <>
     <div
       role="button"
       tabIndex={0}
@@ -106,22 +105,31 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
         {/* Deals rotator */}
         <div className="mt-2">
           <div className="text-md text-slate-300/90">Top Prizes in Daddy Mode</div>
-          <div className="mt-1 flex flex-col items-center border text-xs text-slate-200">
-            <span className="font-medium text-white text-lg animate-pulse">Apple iPhone 17 Pro Max</span>
-            <DealsRotator />
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-2 mb-4 flex justify-end">
+          <div className="mt-1 border text-xs text-slate-200 rounded-md">
+            <div className="flex items-center justify-between px-2 py-1">
+              <Image src="/iphone17.gif" alt="iPhone 17" width={28} height={28} className="rounded-sm" />
+              <div className="">
+              <span className="font-medium text-white text-lg animate-pulse">Apple iPhone 17 Pro Max</span>
+              <div className="mt-1 flex justify-center">
+              <DealsRotator />
+            </div>
+              </div>
+              
+              <Image src="/iphone17.gif" alt="iPhone 17" width={28} height={28} className="rounded-sm" />
+            </div>
+            
+            <div className="mt-2 mb-1 flex justify-center px-2">
               <button
                 type="button"
-                onClick={() => setPrizesOpen(true)}
+                onClick={(e) => { e.stopPropagation(); setPrizesOpen(true); }}
                 className="text-xs rounded border border-white/20 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/10"
               >
                 View more prizes
               </button>
             </div>
+          </div>
+        </div>
+      </div>
 
       {/* Non-session nudge */}
       {!isAuthed ? (
@@ -143,7 +151,8 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
           ) : null}
         </div>
       ) : null}
-      <PrizesModal open={prizesOpen} onClose={() => setPrizesOpen(false)} />
     </div>
+    <PrizesModal open={prizesOpen} onClose={() => setPrizesOpen(false)} />
+    </>
   );
 }
