@@ -302,7 +302,7 @@ export const prizesRouter = createTRPCRouter({
         await ctx.db.delete(prizeWants).where(and(eq(prizeWants.prizeId, input.prizeId), eq(prizeWants.userId, userId)));
         return { wanted: false };
       } else {
-        await ctx.db.insert(prizeWants).values({ prizeId: input.prizeId, userId });
+        await ctx.db.insert(prizeWants).values({ prizeId: input.prizeId, userId, createdAt: ctx.now as any });
         return { wanted: true };
       }
     }),
@@ -310,7 +310,7 @@ export const prizesRouter = createTRPCRouter({
   addComment: protectedProcedure
     .input(z.object({ prizeId: z.number().int().positive(), text: z.string().min(1).max(500), parentCommentId: z.number().int().positive().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const [row] = await ctx.db.insert(prizeComments).values({ prizeId: input.prizeId, userId: ctx.session.user.id, text: input.text, parentCommentId: input.parentCommentId }).returning();
+      const [row] = await ctx.db.insert(prizeComments).values({ prizeId: input.prizeId, userId: ctx.session.user.id, text: input.text, parentCommentId: input.parentCommentId, createdAt: ctx.now as any }).returning();
       return row;
     }),
 

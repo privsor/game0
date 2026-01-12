@@ -32,6 +32,15 @@ export default function InteractionBar({
   const comments = counts?.comments ?? 0;
   const winners = counts?.winners ?? 0;
 
+  // Abbreviate large numbers: 1,234 -> 1.2K; 1,234,567 -> 1.2M; etc.
+  const formatCount = (n: number) => {
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(n % 1_000_000_000 === 0 ? 0 : 1)}B`;
+    if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+    if (abs >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+    return `${n}`;
+  };
+
   // Reusable row item with icon on left and stacked count/label on right
   const RowItem = ({
     icon,
@@ -67,7 +76,12 @@ export default function InteractionBar({
       </div>
       <div className="flex min-w-0 flex-col">
         <div className="flex items-center gap-0">
-          <span className="relative z-10 mr-1.5 font-semibold leading-none">{count}</span>
+          <span
+            className="relative z-10 mr-1.5 font-semibold leading-none"
+            title={count.toLocaleString()}
+          >
+            {formatCount(count)}
+          </span>
           {inlineRight}
         </div>
         <div className="truncate text-xs text-white/70">{label}</div>
@@ -86,7 +100,7 @@ export default function InteractionBar({
         }}
         active={!!wantedByMe}
         inlineRight={
-          <button onClick={onWantAvatarsClick} className="-ml-1 flex -space-x-2">
+          <button onClick={onWantAvatarsClick} className="-ml-1 flex -space-x-2.5">
             {(recentWanters ?? []).slice(0, 5).map((u) => (
               <img
                 key={u.userId}
@@ -104,7 +118,7 @@ export default function InteractionBar({
         count={comments}
         onClick={onComments}
         inlineRight={
-          <button onClick={onCommentsAvatarsClick} className="-ml-1 flex -space-x-2">
+          <button onClick={onCommentsAvatarsClick} className="-ml-1 flex -space-x-2.5">
             {(recentCommenters ?? []).slice(0, 5).map((u) => (
               <img
                 key={u.userId}
@@ -122,7 +136,7 @@ export default function InteractionBar({
         count={winners}
         onClick={onWinners}
         inlineRight={
-          <button onClick={onWinnersAvatarsClick} className="-ml-1 flex -space-x-2">
+          <button onClick={onWinnersAvatarsClick} className="-ml-1 flex -space-x-2.5">
             {(recentWinners ?? []).slice(0, 5).map((u) => (
               <img
                 key={u.userId}

@@ -31,6 +31,7 @@ import { eq } from "drizzle-orm";
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
 	let session = await auth();
+  let now: number | Date | undefined = undefined;
 
 	// Admin-only fako impersonation via cookie
 	try {
@@ -47,6 +48,11 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 				}),
 		);
 		const fakoUserId = jar["fakoUserId"];
+		const fakoNow = jar["fakoNow"]; // ISO timestamp or epoch string
+		if (fakoNow) {
+			const d = new Date(fakoNow);
+			if (!Number.isNaN(d.getTime())) now = d;
+		}
 		if (fakoUserId && session?.user?.email) {
 			const allow = (env.ADMIN_EMAILS ?? "")
 				.split(",")
@@ -77,6 +83,7 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 	return {
 		db,
 		session,
+		now: now ?? new Date(),
 		...opts,
 	};
 };

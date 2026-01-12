@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "~/server/db";
-import { users } from "~/server/db/schema";
+import { users, wallets } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "~/server/auth";
 import { env } from "~/env";
@@ -15,8 +15,9 @@ export async function GET() {
     }
 
     const rows = await db
-      .select({ id: users.id, name: users.name, email: users.email, image: users.image })
+      .select({ id: users.id, name: users.name, email: users.email, image: users.image, balance: wallets.balance })
       .from(users)
+      .leftJoin(wallets, eq(wallets.userId, users.id))
       .where(eq(users.isFako, true));
 
     return NextResponse.json({ ok: true, users: rows });

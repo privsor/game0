@@ -75,6 +75,7 @@ export const walletRouter = createTRPCRouter({
           amount: input.amount,
           type: "earn",
           reason: input.reason ?? "game_win",
+          createdAt: ctx.now as any,
         });
 
         return nextBalance;
@@ -167,13 +168,14 @@ export const walletRouter = createTRPCRouter({
           amount: -coinCost,
           type: "spend",
           reason: purchaseVariantId ? `purchase:v${purchaseVariantId}` : `purchase:g${purchaseGiftId}`,
+          createdAt: ctx.now as any,
         });
 
         // Generate a simple redemption code (in real app, integrate provider)
         const redemptionCode = `DADDY-${purchaseVariantId ?? purchaseGiftId}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
         const [purchase] = await tx
           .insert(purchases)
-          .values({ userId, giftId: purchaseGiftId as any, prizeVariantId: purchaseVariantId as any, redemptionCode })
+          .values({ userId, giftId: purchaseGiftId as any, prizeVariantId: purchaseVariantId as any, redemptionCode, createdAt: ctx.now as any })
           .returning();
         if (!purchase) throw new Error("Failed to record purchase");
 
