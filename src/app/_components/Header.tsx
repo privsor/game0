@@ -4,9 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import AuthTrigger from "./AuthTrigger";
 import WalletBalanceBadge from "./WalletBalanceBadge";
+import { usePathname } from "next/navigation";
 
 export default function Header({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Hide global client header on all admin routes
+  if (pathname?.startsWith("/admin")) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-10 border-b border-white/10 bg-black/70 backdrop-blur">

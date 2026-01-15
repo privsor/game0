@@ -335,6 +335,16 @@ export const prizesRouter = createTRPCRouter({
       return rows;
     }),
 
+  // Admin: delete a comment (and direct replies) for moderation
+  deleteComment: adminProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      // delete direct children first to avoid orphans in simple UIs
+      await ctx.db.delete(prizeComments).where(eq(prizeComments.parentCommentId, input.id));
+      const [row] = await ctx.db.delete(prizeComments).where(eq(prizeComments.id, input.id)).returning();
+      return row ?? { id: input.id } as any;
+    }),
+
   listWanters: publicProcedure
     .input(z.object({ prizeId: z.number().int().positive(), limit: z.number().int().min(1).max(200).optional() }))
     .query(async ({ ctx, input }) => {

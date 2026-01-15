@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { auth } from "~/server/auth";
 import { redirect } from "next/navigation";
+import AdminShell from "./_components/AdminShell";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,8 +29,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div>
+    <AdminShell>
       {children}
-    </div>
+    </AdminShell>
   );
 }

@@ -10,15 +10,18 @@ export default function CommentsModal({
   prizeId,
   requireAuth,
   onChanged,
+  canDelete,
 }: {
   open: boolean;
   onClose: () => void;
   prizeId: number;
   requireAuth?: () => boolean; // return true if blocked by auth
   onChanged?: () => void;
+  canDelete?: boolean;
 }) {
   const { data, refetch, isLoading } = api.prizes.listComments.useQuery({ prizeId }, { enabled: open });
   const addComment = api.prizes.addComment.useMutation();
+  const delComment = api.prizes.deleteComment.useMutation();
   const { data: session } = useSession();
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: number; userName: string | null } | null>(null);
@@ -77,6 +80,10 @@ export default function CommentsModal({
     }
   };
 
+  const removeLocalById = (id: number) => {
+    setLocal((prev) => prev.filter((c: any) => Number(c.id) !== id && Number(c.parentCommentId ?? -1) !== id));
+  };
+
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-black/80">
       <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto p-4">
@@ -101,8 +108,24 @@ export default function CommentsModal({
                       <div className="ml-3 shrink-0 text-[11px] text-white/60">{new Date(c.createdAt as unknown as string).toLocaleString()}</div>
                     </div>
                     <div className="mt-1 text-sm leading-snug whitespace-pre-wrap break-words">{c.text}</div>
-                    <div className="mt-1 text-xs text-white/60">
+                    <div className="mt-1 text-xs text-white/60 flex items-center gap-1">
                       <button className="rounded px-1 py-0.5 hover:bg-white/10" onClick={() => setReplyTo({ id: Number(c.id), userName: c.userName })}>Reply</button>
+                      {canDelete && (
+                        <button
+                          className="rounded px-1 py-0.5 text-red-300 hover:bg-white/10"
+                          onClick={async () => {
+                            if (!confirm("Delete this comment and its direct replies?")) return;
+                            removeLocalById(Number(c.id));
+                            try {
+                              await delComment.mutateAsync({ id: Number(c.id) });
+                              await refetch();
+                              onChanged?.();
+                            } catch {}
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                     {/* children */}
                     {(tree.childrenOf(Number(c.id)) ?? []).length > 0 && (
@@ -116,6 +139,24 @@ export default function CommentsModal({
                                 <div className="ml-3 shrink-0 text-[10px] text-white/60">{new Date(r.createdAt as unknown as string).toLocaleString()}</div>
                               </div>
                               <div className="mt-0.5 text-xs leading-snug whitespace-pre-wrap break-words">{r.text}</div>
+                              {canDelete && (
+                                <div className="mt-0.5 text-[11px] text-white/60">
+                                  <button
+                                    className="rounded px-1 py-0.5 text-red-300 hover:bg-white/10"
+                                    onClick={async () => {
+                                      if (!confirm("Delete this reply?")) return;
+                                      removeLocalById(Number(r.id));
+                                      try {
+                                        await delComment.mutateAsync({ id: Number(r.id) });
+                                        await refetch();
+                                        onChanged?.();
+                                      } catch {}
+                                    }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}

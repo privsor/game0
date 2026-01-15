@@ -177,8 +177,8 @@ export default function AdminFakoPrizesPage() {
         <div>Time: {fakoNow ? new Date(fakoNow).toLocaleString() : "now"}</div>
       </div>
 
-      {/* Existing Prize experience; remount on effective change */}
-      <PrizeClient key={effective?.id || "self"} />
+      {/* Existing Prize experience with moderation; remount on effective change */}
+      <PrizeClient key={effective?.id || "self"} moderationMode />
     </div>
   );
 }

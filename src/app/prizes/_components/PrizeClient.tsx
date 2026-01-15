@@ -14,7 +14,7 @@ import WantersModal from "./WantersModal";
 
 // A richer Prize client that renders grouped prizes with variant selector,
 // media carousel, sponsor, cost, and interaction bar.
-export default function PrizeClient() {
+export default function PrizeClient({ moderationMode }: { moderationMode?: boolean } = {}) {
   const { data: session } = useSession();
   const [authOpen, setAuthOpen] = useState(false);
 
@@ -52,6 +52,7 @@ export default function PrizeClient() {
             loading={loading}
             isAuthed={!!session}
             openAuthModal={() => setAuthOpen(true)}
+            canDelete={!!moderationMode}
             purchase={async (variantId: number) => {
               const res = await purchaseMutation.mutateAsync({ prizeVariantId: variantId } as any);
               await Promise.all([refetchBalance(), refetchPurchases(), refetchPrizes()]);
@@ -91,6 +92,7 @@ function PrizeCard({
   purchaseMap,
   isAuthed,
   openAuthModal,
+  canDelete,
   purchase,
 }: {
   prize: any;
@@ -99,6 +101,7 @@ function PrizeCard({
   purchaseMap: Map<number, { redemptionCode: string }>;
   isAuthed: boolean;
   openAuthModal: () => void;
+  canDelete: boolean;
   purchase: (variantId: number) => Promise<string | undefined>;
 }) {
   const variants = prize.variants ?? [];
@@ -269,6 +272,7 @@ function PrizeCard({
             return false;
           }}
           onChanged={() => refetchIx()}
+          canDelete={canDelete}
         />
         <WinnersModal
           open={showWinners}
