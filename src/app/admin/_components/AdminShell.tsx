@@ -56,7 +56,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           type="button"
           aria-label="Open admin menu"
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 left-4 z-[120] inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 p-3 text-white shadow-lg backdrop-blur hover:bg-white/20"
+          className="fixed bottom-4 left-4 z-[10] inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 p-3 text-white shadow-lg backdrop-blur hover:bg-white/20"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
             <path d="M3.75 6.75h16.5m-16.5 5.25h16.5m-16.5 5.25h16.5" strokeWidth="1.5" stroke="currentColor" strokeLinecap="round" />
