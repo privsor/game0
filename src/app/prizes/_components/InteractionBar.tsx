@@ -84,7 +84,7 @@ export default function InteractionBar({
           </span>
           {inlineRight}
         </div>
-        <div className="truncate text-xs text-white/70">{label}</div>
+        <div className="truncate text-[8px] text-white/70">{label}</div>
       </div>
     </button>
   );

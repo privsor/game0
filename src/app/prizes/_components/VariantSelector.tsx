@@ -20,8 +20,12 @@ export default function VariantSelector({
   // When selectedIdx changes (including ambient auto-rotate), center the active tile
   useEffect(() => {
     const el = itemRefs.current[selectedIdx];
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    const container = containerRef.current;
+    if (!el || !container) return;
+    // Compute horizontal center without affecting vertical scroll
+    const elCenter = el.offsetLeft + el.offsetWidth / 2;
+    const targetScrollLeft = Math.max(0, elCenter - container.clientWidth / 2);
+    container.scrollTo({ left: targetScrollLeft, behavior: "smooth" });
   }, [selectedIdx]);
 
   return (

@@ -122,7 +122,7 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setPrizesOpen(true); }}
-                className="text-xs rounded border border-white/20 bg-white/5 px-3 py-1 text-white/80 hover:bg-white/10"
+                className="text-xs rounded border border-white/20 bg-white/5 px-3 py-1 text-white hover:bg-white/10"
               >
                 View more prizes
               </button>

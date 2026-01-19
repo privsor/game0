@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 import { api } from "~/trpc/react";
 
@@ -26,6 +27,64 @@ export default function CommentsModal({
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<{ id: number; userName: string | null } | null>(null);
   const [local, setLocal] = useState<any[]>([]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [viewportRect, setViewportRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [bottomInset, setBottomInset] = useState<number>(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevPaddingRight = document.body.style.paddingRight;
+    // Optionally account for scrollbar width to avoid layout shift
+    const scrollBarGap = window.innerWidth - document.documentElement.clientWidth;
+    document.body.style.overflow = "hidden";
+    if (scrollBarGap > 0) document.body.style.paddingRight = `${scrollBarGap}px`;
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.paddingRight = prevPaddingRight;
+    };
+  }, [open]);
+
+  // Mobile keyboard handling with VisualViewport (iOS/Android)
+  useEffect(() => {
+    if (!open) return;
+    const vv = (window as any).visualViewport as VisualViewport | undefined;
+    const update = () => {
+      if (vv) {
+        setViewportRect({
+          top: Math.round(vv.offsetTop),
+          left: Math.round(vv.offsetLeft),
+          width: Math.round(vv.width),
+          height: Math.round(vv.height),
+        });
+        const kb = Math.max(0, window.innerHeight - vv.height);
+        setBottomInset(kb);
+        // If keyboard is present, ensure the input stays adjacent to it by
+        // nudging the scrollable area to the bottom after the viewport settles
+        if (kb > 0) {
+          setTimeout(() => {
+            const sc = scrollRef.current;
+            if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+          }, 50);
+        }
+      } else {
+        setViewportRect(null);
+        setBottomInset(0);
+      }
+    };
+    update();
+    vv?.addEventListener("resize", update);
+    vv?.addEventListener("scroll", update);
+    return () => {
+      vv?.removeEventListener("resize", update);
+      vv?.removeEventListener("scroll", update);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) setText("");
@@ -84,13 +143,30 @@ export default function CommentsModal({
     setLocal((prev) => prev.filter((c: any) => Number(c.id) !== id && Number(c.parentCommentId ?? -1) !== id));
   };
 
-  return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-black/80">
-      <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto p-4">
+  const content = (
+    <div
+      className="fixed z-[120] flex flex-col bg-black/80"
+      role="dialog"
+      aria-modal="true"
+      style={
+        viewportRect
+          ? { top: viewportRect.top, left: viewportRect.left, width: viewportRect.width, height: viewportRect.height, position: "fixed" }
+          : { inset: 0 as any }
+      }
+    >
+      {/* Header: not part of the scrollable area */}
+      <div className="mx-auto w-full max-w-md flex-none px-4 pt-4">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-lg font-bold">Comments</div>
           <button onClick={onClose} className="rounded border border-white/20 px-3 py-1 text-sm hover:bg-white/10">Close</button>
         </div>
+      </div>
+
+      {/* Scrollable comments list */}
+      <div
+        ref={scrollRef}
+        className="mx-auto w-full max-w-md flex-1 overflow-y-auto overscroll-contain px-4 pb-4"
+      >
 
         {isLoading ? (
           <div className="p-4 text-white/60">Loading…</div>
@@ -109,7 +185,20 @@ export default function CommentsModal({
                     </div>
                     <div className="mt-1 text-sm leading-snug whitespace-pre-wrap break-words">{c.text}</div>
                     <div className="mt-1 text-xs text-white/60 flex items-center gap-1">
-                      <button className="rounded px-1 py-0.5 hover:bg-white/10" onClick={() => setReplyTo({ id: Number(c.id), userName: c.userName })}>Reply</button>
+                      <button
+                        className="rounded px-1 py-0.5 hover:bg-white/10"
+                        onClick={() => {
+                          setReplyTo({ id: Number(c.id), userName: c.userName });
+                          // Focus the input to open the mobile keyboard and ensure visibility
+                          setTimeout(() => {
+                            inputRef.current?.focus();
+                            const sc = scrollRef.current;
+                            if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+                          }, 50);
+                        }}
+                      >
+                        Reply
+                      </button>
                       {canDelete && (
                         <button
                           className="rounded px-1 py-0.5 text-red-300 hover:bg-white/10"
@@ -170,11 +259,25 @@ export default function CommentsModal({
         )}
       </div>
 
-      <div className="mx-auto w-full max-w-md border-t border-white/10 bg-black/70 p-3">
+      {/* Footer: input bar, kept independent and raised above keyboard via padding */}
+      <div
+        className="mx-auto w-full max-w-md border-t border-white/10 bg-black/70 p-3 flex-none"
+        style={{ paddingBottom: `env(safe-area-inset-bottom, 0px)` }}
+      >
         <div className="flex items-center gap-2">
           <input
+            ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onFocus={() => {
+              // Delay to allow keyboard animation then ensure visibility
+              setTimeout(() => {
+                // Ensure the scroll area snaps to the bottom so the input is visible
+                const sc = scrollRef.current;
+                if (sc) sc.scrollTo({ top: sc.scrollHeight, behavior: "smooth" });
+                else inputRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+              }, 150);
+            }}
             placeholder={replyTo ? `Reply to ${replyTo.userName ?? "comment"}…` : "Add a comment…"}
             className="flex-1 rounded bg-white/10 px-3 py-2 text-sm placeholder:text-white/50 focus:outline-none"
           />
@@ -188,4 +291,9 @@ export default function CommentsModal({
       </div>
     </div>
   );
+
+  // Render in a portal so it is not constrained by parent modals or transforms
+  return mounted && typeof window !== "undefined" && document?.body
+    ? createPortal(content, document.body)
+    : content;
 }

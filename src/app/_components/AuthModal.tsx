@@ -15,7 +15,7 @@ export default function AuthModal({ open, onClose, callbackUrl = "/" }: AuthModa
   if (!open) return null;
 
   return createPortal(
-    <div id="auth-modal" className="fixed inset-0 z-50 flex items-center justify-center">
+    <div id="auth-modal" className="fixed inset-0 z-[150] flex items-center justify-center">
       {/* Backdrop */}
       <button
         aria-label="Close auth modal"
