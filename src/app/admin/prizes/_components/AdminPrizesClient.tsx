@@ -18,6 +18,10 @@ type FlatRow = {
   sortOrder: number;
   variantPrimaryImageUrl?: string | null;
   variantMedia?: Array<{ type: "image" | "video"; url: string; alt?: string; sortOrder?: number }> | null;
+  variantMetadata?: any;
+  claimsUsed?: number | null;
+  claimsLimit?: number | null;
+  claimsLeft?: number | null;
 };
 
 export default function AdminPrizesClient() {
@@ -31,6 +35,11 @@ export default function AdminPrizesClient() {
   const updateVariant = api.prizes.updateVariant.useMutation();
   const toggleVariantActive = api.prizes.toggleVariantActive.useMutation();
   const removeVariant = api.prizes.removeVariant.useMutation();
+
+  // Mobile: per-prize collapse state
+  const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
+  const toggleCollapsed = (id: number) =>
+    setCollapsed((s) => ({ ...s, [id]: !s[id] }));
 
   const [prizeForm, setPrizeForm] = useState({
     title: "",
@@ -52,6 +61,7 @@ export default function AdminPrizesClient() {
     sortOrder: 0,
     active: true,
     primaryImageUrl: "",
+    claimLimit: "" as number | "",
   });
 
   const grouped = useMemo(() => {
@@ -130,8 +140,11 @@ export default function AdminPrizesClient() {
       sortOrder: Number(variantForm.sortOrder) || 0,
       active: !!variantForm.active,
       primaryImageUrl: variantForm.primaryImageUrl || undefined,
+      metadata: typeof variantForm.claimLimit === "number" && !Number.isNaN(variantForm.claimLimit)
+        ? ({ claimLimit: variantForm.claimLimit } as any)
+        : undefined,
     } as any);
-    setVariantForm({ prizeId: 0, label: "", buttonLabel: "", coinCost: 0, sku: "", sortOrder: 0, active: true, primaryImageUrl: "" });
+    setVariantForm({ prizeId: 0, label: "", buttonLabel: "", coinCost: 0, sku: "", sortOrder: 0, active: true, primaryImageUrl: "", claimLimit: "" });
     await refetch();
   };
 
@@ -174,6 +187,13 @@ export default function AdminPrizesClient() {
           <input value={variantForm.sku} onChange={(e) => setVariantForm((f) => ({ ...f, sku: e.target.value }))} placeholder="SKU (optional)" className="rounded bg-black px-2 py-1" />
           <input type="number" value={variantForm.sortOrder} onChange={(e) => setVariantForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))} placeholder="Sort Order" className="rounded bg-black px-2 py-1" />
           <input value={variantForm.primaryImageUrl} onChange={(e) => setVariantForm((f) => ({ ...f, primaryImageUrl: e.target.value }))} placeholder="Variant Primary Image URL" className="rounded bg-black px-2 py-1 md:col-span-2" />
+          <input
+            type="number"
+            value={variantForm.claimLimit as any}
+            onChange={(e) => setVariantForm((f) => ({ ...f, claimLimit: e.target.value === "" ? "" : Number(e.target.value) }))}
+            placeholder="Claim Limit (optional)"
+            className="rounded bg-black px-2 py-1"
+          />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={variantForm.active} onChange={(e) => setVariantForm((f) => ({ ...f, active: e.target.checked }))} /> Active
           </label>
@@ -191,12 +211,12 @@ export default function AdminPrizesClient() {
           <div className="space-y-6">
             {grouped.map(({ prize, variants }) => (
               <div key={prize.id} className="rounded border border-white/10">
-                <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-black/30 p-3">
                   <div className="flex items-center gap-3">
-                    <div className="font-semibold">{prize.title}</div>
+                    <div className="font-semibold leading-tight">{prize.title}</div>
                     <div className="text-xs text-white/50">Vendor: {prize.vendor ?? "-"}</div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="inline-flex flex-wrap items-center gap-2 md:ml-auto">
                     <button
                       onClick={async () => {
                         await togglePrizeActive.mutateAsync({ id: prize.id, active: prize.active ? false : true });
@@ -221,8 +241,8 @@ export default function AdminPrizesClient() {
                   </div>
                 </div>
 
-                {/* Inline edit for prize fields */}
-                <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-6">
+                {/* Inline edit for prize fields (hidden when collapsed on mobile) */}
+                <div className={`grid grid-cols-1 gap-3 p-3 md:grid-cols-6 ${(collapsed[prize.id] ?? true) ? "hidden md:grid" : ""}`}>
                   <input
                     defaultValue={prize.title}
                     onBlur={async (e) => {
@@ -270,7 +290,7 @@ export default function AdminPrizesClient() {
                 </div>
 
                 {/* Prize Media Gallery Editor */}
-                <div className="p-3">
+                <div className={`p-3 ${(collapsed[prize.id] ?? true) ? "hidden md:block" : ""}`}>
                   <div className="mb-2 text-sm font-semibold">Prize Media</div>
                   <MediaEditor
                     items={prize.media}
@@ -281,7 +301,7 @@ export default function AdminPrizesClient() {
                   />
                 </div>
 
-                <div className="p-3">
+                <div className={`p-3 ${(collapsed[prize.id] ?? true) ? "hidden md:block" : ""}`}>
                   {/* Desktop/tablet: table view */}
                   <table className="hidden min-w-full text-sm md:table">
                     <thead className="text-white/60">
@@ -291,6 +311,7 @@ export default function AdminPrizesClient() {
                         <th className="px-2 py-2 text-left">Coin Cost</th>
                         <th className="px-2 py-2 text-left">Sort</th>
                         <th className="px-2 py-2 text-left">Primary Image</th>
+                        <th className="px-2 py-2 text-left">Stock</th>
                         <th className="px-2 py-2 text-left">Active</th>
                         <th className="px-2 py-2 text-left">Actions</th>
                       </tr>
@@ -365,6 +386,27 @@ export default function AdminPrizesClient() {
                             />
                           </td>
                           <td className="px-2 py-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                defaultValue={(v as any).claimsLimit ?? ""}
+                                onBlur={async (e) => {
+                                  const raw = e.target.value;
+                                  const next = raw === "" ? null : Number(raw);
+                                  const nextMeta = { ...((v as any).variantMetadata || {}), claimLimit: next } as any;
+                                  await updateVariant.mutateAsync({ id: v.variantId, metadata: nextMeta });
+                                  await refetch();
+                                }}
+                                className="w-24 rounded bg-black px-2 py-1"
+                                placeholder="Limit"
+                              />
+                              <div className="text-xs text-white/60">
+                                Used: {Number((v as any).claimsUsed ?? 0)}{(v as any).claimsLimit != null ? ` / ${Number((v as any).claimsLimit)}` : ""}
+                                {(v as any).claimsLimit != null ? ` • Left: ${Math.max(0, Number((v as any).claimsLeft ?? 0))}` : ""}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2">
                             <button
                               onClick={async () => {
                                 await toggleVariantActive.mutateAsync({ id: v.variantId, active: v.variantActive ? false : true });
@@ -406,7 +448,7 @@ export default function AdminPrizesClient() {
 
                   {/* Mobile: stacked cards */}
                   <div className="md:hidden">
-                    <div className="space-y-4">
+                    <div className={`space-y-4 ${(collapsed[prize.id] ?? true) ? "hidden" : "block"}`}>
                       {variants.map((v) => (
                         <div key={v.variantId} className="rounded border border-white/10 bg-black/30 p-3">
                           <div className="grid grid-cols-1 gap-3">
@@ -469,6 +511,29 @@ export default function AdminPrizesClient() {
                               className="rounded bg-black px-2 py-1"
                               placeholder="Variant primary image URL"
                             />
+                            {/* Mobile: Stock editor */}
+                            <div className="rounded border border-white/10 bg-black/20 p-2">
+                              <div className="mb-1 text-xs text-white/60">Stock</div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  defaultValue={(v as any).claimsLimit ?? ""}
+                                  onBlur={async (e) => {
+                                    const raw = e.target.value;
+                                    const next = raw === "" ? null : Number(raw);
+                                    const nextMeta = { ...((v as any).variantMetadata || {}), claimLimit: next } as any;
+                                    await updateVariant.mutateAsync({ id: v.variantId, metadata: nextMeta });
+                                    await refetch();
+                                  }}
+                                  className="w-24 rounded bg-black px-2 py-1"
+                                  placeholder="Limit"
+                                />
+                                <div className="text-xs text-white/60">
+                                  Used: {Number((v as any).claimsUsed ?? 0)}
+                                  {(v as any).claimsLimit != null ? ` / ${Number((v as any).claimsLimit)} • Left: ${Math.max(0, Number((v as any).claimsLeft ?? 0))}` : ""}
+                                </div>
+                              </div>
+                            </div>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={async () => {
@@ -508,6 +573,15 @@ export default function AdminPrizesClient() {
                       ))}
                     </div>
                   </div>
+                </div>
+                <div className="border-t border-white/10 p-3">
+                  <button
+                    className="w-full rounded border border-white/20 bg-black/20 px-3 py-2 text-sm hover:bg-black/30"
+                    onClick={() => toggleCollapsed(prize.id)}
+                    aria-label="Toggle details"
+                  >
+                    {(collapsed[prize.id] ?? true) ? "Expand" : "Collapse"}
+                  </button>
                 </div>
               </div>
             ))}

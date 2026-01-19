@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import {
@@ -126,6 +126,7 @@ export const walletRouter = createTRPCRouter({
               active: prizeVariants.active,
               prizeActive: prizes.active,
               prizeId: prizeVariants.prizeId,
+              metadata: prizeVariants.metadata,
             })
             .from(prizeVariants)
             .innerJoin(prizes, eq(prizes.id, prizeVariants.prizeId))
@@ -133,6 +134,21 @@ export const walletRouter = createTRPCRouter({
             .limit(1)
             .then((r) => r[0]);
           if (!variant || variant.active !== 1 || variant.prizeActive !== 1) throw new Error("Prize variant not available");
+
+          // Enforce stock/claim limit if configured on variant.metadata.claimLimit
+          const claimLimit = (variant as any)?.metadata?.claimLimit as number | undefined;
+          if (typeof claimLimit === "number") {
+            const usedRow = await tx
+              .select({ count: sql<number>`COUNT(*)` })
+              .from(purchases)
+              .where(eq(purchases.prizeVariantId, variant.id as any))
+              .limit(1)
+              .then((r) => r[0]);
+            const used = Number(usedRow?.count ?? 0);
+            if (used >= claimLimit) {
+              throw new Error("Sold out");
+            }
+          }
           coinCost = variant.coinCost;
           purchaseVariantId = variant.id as unknown as number;
           purchaseGiftId = null; // legacy gift not used in this path

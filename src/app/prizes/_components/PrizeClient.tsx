@@ -39,10 +39,11 @@ export default function PrizeClient({ moderationMode }: { moderationMode?: boole
   }, [purchases]);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-7xl px-3 md:px-4 lg:px-6 py-6 md:py-8">
       <Header balance={balance} loading={loading} />
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {/* Responsive grid tuned for desktop */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 md:gap-6 md:grid-cols-2 lg:grid-cols-2">
         {(prizes ?? []).map((p: any) => (
           <PrizeCard
             key={p.id}
@@ -145,6 +146,15 @@ function PrizeCard({
   const code = selected ? purchaseMap.get(selected.id as number)?.redemptionCode : undefined;
   const canAfford = selected ? balance >= (selected.coinCost as number) : false;
 
+  // Admin: inline stock (claims limit) editor for selected variant
+  const updateVariant = api.prizes.updateVariant.useMutation();
+  const [stockInput, setStockInput] = useState<string>(
+    selected?.claimsLimit != null ? String(selected?.claimsLimit) : ""
+  );
+  useEffect(() => {
+    setStockInput(selected?.claimsLimit != null ? String(selected?.claimsLimit) : "");
+  }, [selected?.id]);
+
   return (
     <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
       {/* Media carousel */}
@@ -192,14 +202,48 @@ function PrizeCard({
           />
         )}
 
-        {/* Claims left + Cost row */}
+        {/* Claims left + Cost row (variant-specific) */}
         <div className="flex items-center justify-between text-sm">
-          <div className="text-white/70">Claims left: 7 out of 10</div>
+          <div className="text-white/70">
+            {selected?.claimsLimit != null &&
+              `Claims left: ${Math.max(0, Number(selected?.claimsLeft ?? 0))} / ${Number(selected?.claimsLimit)}`}
+          </div>
           <div className="inline-flex items-center gap-1.5 font-semibold">
             {selected?.coinCost ?? "—"}
             <Image src="/icons/daddycoin.svg" width={18} height={18} alt="DaddyCoins" />
           </div>
         </div>
+
+        {canDelete && selected && (
+          <div className="rounded-md border border-white/10 bg-black/30 p-2 space-y-2">
+            <div className="text-[11px] uppercase text-white/50">Admin • Stock</div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <label className="text-white/70">Claim limit</label>
+              <input
+                type="number"
+                min={0}
+                className="w-24 rounded border border-white/20 bg-black/40 px-2 py-1"
+                value={stockInput}
+                onChange={(e) => setStockInput(e.target.value)}
+              />
+              <button
+                className="rounded bg-white text-black px-2 py-1 text-xs disabled:opacity-50"
+                disabled={updateVariant.isPending}
+                onClick={async () => {
+                  const num = stockInput === "" ? null : Number(stockInput);
+                  const nextMeta = { ...(selected.metadata || {}), claimLimit: num } as any;
+                  await updateVariant.mutateAsync({ id: selected.id as number, metadata: nextMeta });
+                }}
+              >
+                {updateVariant.isPending ? "Saving…" : "Save"}
+              </button>
+              <div className="ml-auto text-xs text-white/60">
+                Used: {Number(selected?.claimsUsed ?? 0)}
+                {selected?.claimsLimit != null ? ` • Left: ${Math.max(0, Number(selected?.claimsLeft ?? 0))}` : ""}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Claim button */}
         <button
@@ -217,10 +261,10 @@ function PrizeCard({
                 alert(e?.message ?? "Failed to purchase");
               }
             }}
-            disabled={!selected || loading}
+            disabled={!selected || loading || (selected?.claimsLimit != null && Number(selected?.claimsLeft ?? 0) <= 0)}
             className="w-full rounded-md bg-white px-3 py-2 text-center font-semibold text-black hover:bg-white/90 disabled:opacity-50"
           >
-          {selected ? "Claim" : "Select variant"}
+          {selected ? (selected?.claimsLimit != null && Number(selected?.claimsLeft ?? 0) <= 0 ? "Sold out" : "Claim") : "Select variant"}
         </button>
 
         {/* Interaction bar */}

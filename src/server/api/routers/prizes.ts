@@ -69,10 +69,23 @@ export const prizesRouter = createTRPCRouter({
         sortOrder: prizeVariants.sortOrder,
         primaryImageUrl: prizeVariants.primaryImageUrl,
         media: prizeVariants.media,
+        metadata: prizeVariants.metadata,
       })
       .from(prizeVariants)
       .where(and(eq(prizeVariants.active, 1), inArray(prizeVariants.prizeId, prizeIds)))
       .orderBy(asc(prizeVariants.prizeId), asc(prizeVariants.sortOrder), asc(prizeVariants.coinCost));
+
+    // Count purchases grouped by variant to power claims left per variant
+    const variantIds = variantsRows.map((v) => v.id);
+    let purchasesPerVariant = new Map<number, number>();
+    if (variantIds.length > 0) {
+      const purchaseRows = await ctx.db
+        .select({ variantId: purchases.prizeVariantId, used: sql<number>`COUNT(*)` })
+        .from(purchases)
+        .where(inArray(purchases.prizeVariantId, variantIds))
+        .groupBy(purchases.prizeVariantId);
+      purchasesPerVariant = new Map(purchaseRows.map((r: any) => [r.variantId as number, Number(r.used ?? 0)]));
+    }
 
     const grouped = prizesRows.map((p) => ({
       ...p,
@@ -82,6 +95,11 @@ export const prizesRouter = createTRPCRouter({
         ...v,
         imageUrl: v.primaryImageUrl ?? p.primaryImageUrl ?? p.imageUrl,
         videoUrl: p.videoUrl, // simple fallback for now
+        claimsUsed: purchasesPerVariant.get(v.id) ?? 0,
+        claimsLimit: (v.metadata as any)?.claimLimit ?? null,
+        claimsLeft: typeof (v.metadata as any)?.claimLimit === "number"
+          ? Math.max(0, Number((v.metadata as any).claimLimit) - (purchasesPerVariant.get(v.id) ?? 0))
+          : null,
       })),
     }));
 
@@ -107,11 +125,28 @@ export const prizesRouter = createTRPCRouter({
         sortOrder: prizeVariants.sortOrder,
         variantPrimaryImageUrl: prizeVariants.primaryImageUrl,
         variantMedia: prizeVariants.media,
+        variantMetadata: prizeVariants.metadata,
       })
       .from(prizes)
       .leftJoin(prizeVariants, eq(prizes.id, prizeVariants.prizeId))
       .orderBy(desc(prizes.createdAt), asc(prizeVariants.sortOrder));
-    return rows;
+    // augment with purchases count per variant
+    const variantIds = rows.map((r: any) => r.variantId).filter((id: any) => typeof id === "number");
+    if (variantIds.length === 0) return rows as any;
+    const purchaseRows = await ctx.db
+      .select({ variantId: purchases.prizeVariantId, used: sql<number>`COUNT(*)` })
+      .from(purchases)
+      .where(inArray(purchases.prizeVariantId, variantIds as any))
+      .groupBy(purchases.prizeVariantId);
+    const usedMap = new Map<number, number>(purchaseRows.map((r: any) => [r.variantId as number, Number(r.used ?? 0)]));
+    const withCounts = rows.map((r: any) => {
+      if (typeof r.variantId !== "number") return r;
+      const meta = r.variantMetadata as any;
+      const limit = typeof meta?.claimLimit === "number" ? meta.claimLimit : null;
+      const used = usedMap.get(r.variantId) ?? 0;
+      return { ...r, claimsUsed: used, claimsLimit: limit, claimsLeft: limit != null ? Math.max(0, Number(limit) - used) : null };
+    });
+    return withCounts as any;
   }),
 
   // Admin: create prize
