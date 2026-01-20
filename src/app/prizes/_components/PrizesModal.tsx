@@ -24,7 +24,7 @@ export default function PrizesModal({ open, onClose }: { open: boolean; onClose:
 
   const content = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70" role="dialog" aria-modal="true">
-      <div className="relative w-full max-w-[92vw] lg:max-w-6xl max-h-[85vh] flex flex-col rounded-xl border border-white/10 bg-black/60 backdrop-blur-md shadow-xl overflow-hidden">
+      <div className="relative w-full lg:max-w-6xl max-h-[85vh] flex flex-col rounded-xl border border-white/10 bg-black/60 backdrop-blur-md shadow-xl overflow-hidden">
         <div className="flex flex-none items-center justify-between px-4 py-3 border-b border-white/10 bg-black/50">
           <div className="text-base md:text-lg font-extrabold tracking-tight">All Prizes</div>
           <button
@@ -35,7 +35,7 @@ export default function PrizesModal({ open, onClose }: { open: boolean; onClose:
             Close
           </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 md:p-4 text-left">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain md:p-4 text-left">
           <PrizeClient />
         </div>
       </div>

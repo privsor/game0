@@ -116,6 +116,7 @@ export const prizesRouter = createTRPCRouter({
         prizeVendor: prizes.vendor,
         prizeVendorLogo: prizes.vendorLogo,
         prizePrimaryImageUrl: prizes.primaryImageUrl,
+        prizeMetadata: prizes.metadata,
         prizeMedia: prizes.media,
         variantId: prizeVariants.id,
         label: prizeVariants.label,
@@ -264,6 +265,14 @@ export const prizesRouter = createTRPCRouter({
   getInteraction: publicProcedure
     .input(z.object({ prizeId: z.number().int().positive() }))
     .query(async ({ ctx, input }) => {
+      // read baseWants from prize metadata
+      const [prizeRow] = await ctx.db
+        .select({ metadata: prizes.metadata })
+        .from(prizes)
+        .where(eq(prizes.id, input.prizeId))
+        .limit(1);
+      const baseWants = Number(((prizeRow as any)?.metadata as any)?.baseWants ?? 0) || 0;
+
       const wantRow = await ctx.db
         .select({ count: sql<number>`COUNT(*)` })
         .from(prizeWants)
@@ -321,6 +330,7 @@ export const prizesRouter = createTRPCRouter({
         recentWanters,
         recentCommenters,
         recentWinners,
+        baseWants,
       };
     }),
 
@@ -390,7 +400,14 @@ export const prizesRouter = createTRPCRouter({
         .where(eq(prizeWants.prizeId, input.prizeId))
         .orderBy(desc(prizeWants.createdAt))
         .limit(input.limit ?? 50);
-      return rows;
+      // include baseWants from prize metadata
+      const [prizeRow] = await ctx.db
+        .select({ metadata: prizes.metadata })
+        .from(prizes)
+        .where(eq(prizes.id, input.prizeId))
+        .limit(1);
+      const baseWants = Number(((prizeRow as any)?.metadata as any)?.baseWants ?? 0) || 0;
+      return { items: rows, baseWants } as any;
     }),
 
   listWinners: publicProcedure

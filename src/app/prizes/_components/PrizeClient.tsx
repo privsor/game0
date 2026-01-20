@@ -110,7 +110,7 @@ function PrizeCard({
   const selected = variants[selectedIdx];
 
   // Interaction hooks per prize
-  const { data: ix, refetch: refetchIx } = api.prizes.getInteraction.useQuery({ prizeId: prize.id });
+  const { data: ix, refetch: refetchIx, isLoading: isIxLoading, isFetching: isIxFetching } = api.prizes.getInteraction.useQuery({ prizeId: prize.id });
   const toggleWant = api.prizes.toggleWant.useMutation();
   const addComment = api.prizes.addComment.useMutation();
   const [showComments, setShowComments] = useState(false);
@@ -122,6 +122,7 @@ function PrizeCard({
   const [optimisticWantDelta, setOptimisticWantDelta] = useState(0);
   const wantedByMe = optimisticWanted ?? !!ix?.wantedByMe;
   const wantCount = (ix?.want ?? 0) + optimisticWantDelta;
+  const displayWantCount = wantCount + (ix?.baseWants ?? 0);
 
   // reset carousel when variant changes
   const [activeSlide, setActiveSlide] = useState(0);
@@ -269,11 +270,12 @@ function PrizeCard({
 
         {/* Interaction bar */}
         <InteractionBar
-          counts={{ want: wantCount, comments: ix?.comments ?? 0, winners: ix?.winners ?? 0 }}
+          counts={{ want: displayWantCount, comments: ix?.comments ?? 0, winners: ix?.winners ?? 0 }}
           wantedByMe={wantedByMe}
           recentWanters={ix?.recentWanters as any}
           recentCommenters={ix?.recentCommenters as any}
           recentWinners={ix?.recentWinners as any}
+          loadingCounts={isIxLoading || isIxFetching}
           onWant={async () => {
             if (!isAuthed) {
               openAuthModal();

@@ -74,6 +74,7 @@ export default function AdminPrizesClient() {
           active: number;
           vendor: string | null;
           primaryImageUrl: string | null;
+          metadata?: any;
           media: Array<{ type: "image" | "video"; url: string; alt?: string; sortOrder?: number }>;
         };
         variants: (FlatRow & { variantPrimaryImageUrl?: string | null; variantMedia?: Array<{ type: "image" | "video"; url: string; alt?: string; sortOrder?: number }> | null })[];
@@ -89,6 +90,7 @@ export default function AdminPrizesClient() {
             active: r.prizeActive as number,
             vendor: (r.prizeVendor as string) ?? null,
             primaryImageUrl: (r.prizePrimaryImageUrl as string) ?? null,
+            metadata: (r as any).prizeMetadata ?? null,
             media: (r.prizeMedia as any[]) ?? [],
           },
           variants: [],
@@ -287,6 +289,24 @@ export default function AdminPrizesClient() {
                     className="rounded bg-black px-2 py-1 md:col-span-2"
                     placeholder="Primary image URL"
                   />
+                  {/* Base Wants (virtual wants for display) */}
+                  <div className="flex flex-col">
+                    <label className="text-xs text-white/60 mb-1">Base wants</label>
+                    <input
+                      type="number"
+                      defaultValue={Number(((prize as any).metadata?.baseWants ?? 0))}
+                      onBlur={async (e) => {
+                        const next = Number(e.target.value || 0);
+                        if (next !== Number(((prize as any).metadata?.baseWants ?? 0))) {
+                          const nextMeta = { ...(((prize as any).metadata) || {}), baseWants: next } as any;
+                          await updatePrize.mutateAsync({ id: prize.id, metadata: nextMeta });
+                          await refetch();
+                        }
+                      }}
+                      className="rounded bg-black px-2 py-1"
+                      placeholder="Base wants"
+                    />
+                  </div>
                 </div>
 
                 {/* Prize Media Gallery Editor */}
