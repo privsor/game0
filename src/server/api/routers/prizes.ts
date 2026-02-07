@@ -420,6 +420,7 @@ export const prizesRouter = createTRPCRouter({
           createdAt: purchases.createdAt,
           userImage: users.image,
           userName: users.name,
+          variantLabel: prizeVariants.label,
         })
         .from(purchases)
         .innerJoin(users, eq(users.id, purchases.userId))

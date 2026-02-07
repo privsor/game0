@@ -36,6 +36,7 @@ export default function WinnersModal({
                   <div className="flex-1">
                     <div className="text-sm font-semibold truncate">{(w as any).userName ?? "User"}</div>
                     <div className="text-[11px] text-white/60">{new Date(w.createdAt as unknown as string).toLocaleString()}</div>
+                    <div className="text-[11px] text-white/80">{(w as any).variantLabel}</div>
                   </div>
                 </div>
               </div>
