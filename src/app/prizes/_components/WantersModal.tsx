@@ -41,7 +41,7 @@ export default function WantersModal({
               ))}
             </div>
             {Number((data as any)?.baseWants ?? 0) > 0 && (
-              <div className="mt-4 rounded border border-white/10 bg-white/5 p-2 text-center text-xs text-white/70">
+              <div className="mt-4 rounded border border-white/10 bg-white/0 backdrop-blur p-2 text-center text-xs text-white/70">
                 +{Number((data as any).baseWants)} more players want this prize
               </div>
             )}

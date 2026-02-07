@@ -30,7 +30,7 @@ export default function WinnersModal({
         ) : (
           <div className="space-y-3">
             {data?.map((w) => (
-              <div key={w.id} className="rounded border border-white/10 bg-white/5 p-2">
+              <div key={w.id} className="rounded border border-white/10 bg-white/0 backdrop-blur p-2">
                 <div className="flex items-center gap-2">
                   <img src={(w as any).userImage ?? "/default-avatar.png"} alt={(w as any).userName ?? ""} className="h-7 w-7 rounded-full object-cover" />
                   <div className="flex-1">
