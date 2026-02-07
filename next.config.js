@@ -19,6 +19,9 @@ const config = {
       { protocol: "https", hostname: "fbi.cults3d.com" },
       { protocol: "https", hostname: "images.icon-icons.com" },
       { protocol: "https", hostname: "www.trafalgar.com" },
+      { protocol: "https", hostname: "scontent-bcn1-1.cdninstagram.com" },
+      { protocol: "https", hostname: "scontent-gru1-1.cdninstagram.com" },
+      { protocol: "https", hostname: "instagram.fixc4-2.fna.fbcdn.net" },
     ],
   },
 };
