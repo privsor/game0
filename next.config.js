@@ -22,6 +22,13 @@ const config = {
       { protocol: "https", hostname: "scontent-bcn1-1.cdninstagram.com" },
       { protocol: "https", hostname: "scontent-gru1-1.cdninstagram.com" },
       { protocol: "https", hostname: "instagram.fixc4-2.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-3.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-4.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-5.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-6.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-7.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-8.fna.fbcdn.net" },
+      { protocol: "https", hostname: "instagram.fixc4-9.fna.fbcdn.net" },
     ],
   },
 };
