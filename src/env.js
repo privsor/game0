@@ -41,6 +41,9 @@ export const env = createEnv({
 		// Optional clientId to identify users in Ably (helpful for presence)
 		NEXT_PUBLIC_ABLY_CLIENT_ID: z.string().optional(),
 		NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string(),
+		// Supabase for file storage
+		NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+		NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string(),
 	},
 
 	/**
@@ -63,6 +66,8 @@ export const env = createEnv({
 		RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
 		RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
 		NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+		NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+		NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 		ADMIN_EMAILS: process.env.ADMIN_EMAILS,
 	},
 	/**

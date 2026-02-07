@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import FakoUserCard, { type FakoUserRow } from "./_components/FakoUserCard";
+import { supabase } from "~/lib/supabase";
 
 // Server action lives in the same file using the React Server Actions convention
 // We export a stub client that calls the server action via form action prop.
@@ -9,6 +10,7 @@ import FakoUserCard, { type FakoUserRow } from "./_components/FakoUserCard";
 export default function FakoUsersAdminPage() {
   const [username, setUsername] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -29,15 +31,42 @@ export default function FakoUsersAdminPage() {
     return { id, email };
   }, [username]);
 
+  async function uploadFile() {
+    if (!file) return null;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const { data, error } = await supabase.storage
+      .from('pfp') // assuming bucket name is 'pfp'
+      .upload(fileName, file);
+    if (error) {
+      setError(`Upload failed: ${error.message}`);
+      return null;
+    }
+    const { data: urlData } = supabase.storage
+      .from('pfp')
+      .getPublicUrl(fileName);
+    return urlData.publicUrl;
+  }
+
   async function onSubmit(formData: FormData) {
     setMessage(null);
     setError(null);
     startTransition(async () => {
       try {
+        let finalImageUrl = imageUrl;
+        if (file) {
+          const uploadedUrl = await uploadFile();
+          if (uploadedUrl) {
+            finalImageUrl = uploadedUrl;
+          } else {
+            // Error already set in uploadFile
+            return;
+          }
+        }
         const res = await fetch("/admin/fako/users/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, imageUrl }),
+          body: JSON.stringify({ username, imageUrl: finalImageUrl }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -46,6 +75,7 @@ export default function FakoUsersAdminPage() {
           setMessage("User created successfully");
           setUsername("");
           setImageUrl("");
+          setFile(null);
           // refresh list
           void fetchList();
         }
@@ -143,6 +173,15 @@ export default function FakoUsersAdminPage() {
           />
         </div>
         <div>
+          <label className="block text-sm font-medium">Profile Picture (optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            className="mt-1 w-full rounded border px-3 py-2"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+          />
+        </div>
+        <div>
           <label className="block text-sm font-medium">Profile Image URL (optional)</label>
           <input
             className="mt-1 w-full rounded border px-3 py-2"
@@ -212,6 +251,15 @@ export default function FakoUsersAdminPage() {
               <div>
                 <label className="block text-sm font-medium">Username</label>
                 <input className="mt-1 w-full rounded border px-3 py-2" placeholder="e.g. alice" value={username} onChange={(e) => setUsername(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Profile Picture (optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="mt-1 w-full rounded border px-3 py-2"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium">Profile Image URL (optional)</label>
