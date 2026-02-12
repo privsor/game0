@@ -13,6 +13,7 @@ import { StatusBadges } from "./_components/StatusBadges";
 import { PlayersSummary } from "./_components/PlayersSummary";
 import { WinnerBanner } from "./_components/WinnerBanner";
 import { InviteModal } from "./_components/InviteModal";
+import { ScanQRModal } from "./_components/ScanQRModal";
 import { RoomHeaderBar } from "./_components/RoomHeaderBar";
 import { calculateWinner, winningLine, initialState } from "./_utils/game";
 import type { Role, GameState } from "./_types";
@@ -58,6 +59,7 @@ export default function GameClient() {
   const [joining, setJoining] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [showScanQR, setShowScanQR] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareDone, setShareDone] = useState<null | 'copied' | 'shared'>(null);
   // Tooltip for invite button when only Player 1 is present
@@ -587,6 +589,7 @@ export default function GameClient() {
             setInputCode={setInputCode}
             onCreate={startNewRoom}
             onJoin={joinRoom}
+            onScanQR={() => setShowScanQR(true)}
           />
         ) : (
           <div className="grid gap-2 md:gap-5">
@@ -716,6 +719,21 @@ export default function GameClient() {
         </div>
       </div>
       
+      {/* Scan QR modal */}
+      {!roomCode && showScanQR && (
+        <ScanQRModal
+          onClose={() => setShowScanQR(false)}
+          onScanSuccess={(code) => {
+            setInputCode(code);
+            setShowScanQR(false);
+            // Small delay to ensure state updates before join
+            setTimeout(() => {
+              router.push(`/tictactoe?room=${code}`);
+            }, 100);
+          }}
+        />
+      )}
+
       {/* Join modal */}
       {roomCode && showJoin && (
         <JoinModal

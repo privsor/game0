@@ -31,6 +31,7 @@
 		"ably": "^2.14.0",
 		"bcryptjs": "^3.0.3",
 		"drizzle-orm": "^0.41.0",
+		"html5-qrcode": "^2.3.8",
 		"nanoid": "^5.1.6",
 		"next": "^15.2.3",
 		"next-auth": "5.0.0-beta.25",
