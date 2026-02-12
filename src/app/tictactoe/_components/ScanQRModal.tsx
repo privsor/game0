@@ -23,7 +23,8 @@ function ScanQRModalImpl({ onClose, onScanSuccess }: ScanQRModalProps) {
     const config = {
       fps: 10,
       qrbox: { width: 250, height: 250 },
-      aspectRatio: 1.0,
+      // Disable default QR box UI to use our custom styling
+      disableQrBox: true,
     };
 
     const qrCodeSuccessCallback = (decodedText: string) => {
@@ -117,8 +118,8 @@ function ScanQRModalImpl({ onClose, onScanSuccess }: ScanQRModalProps) {
               </div>
             )}
 
-            {/* Scan overlay - corner brackets */}
-            {!isStarting && !error && (
+            {/* Scan overlay - corner brackets (only show when running) */}
+            {!isStarting && !error && isRunningRef.current && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <div className="relative w-[250px] h-[250px]">
                   {/* Top-left corner */}

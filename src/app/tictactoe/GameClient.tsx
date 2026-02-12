@@ -724,12 +724,19 @@ export default function GameClient() {
         <ScanQRModal
           onClose={() => setShowScanQR(false)}
           onScanSuccess={(code) => {
-            setInputCode(code);
             setShowScanQR(false);
-            // Small delay to ensure state updates before join
-            setTimeout(() => {
-              router.push(`/tictactoe?room=${code}`);
-            }, 100);
+            // Get default name from localStorage or use "Player 2"
+            let defaultName = "Player 2";
+            try {
+              const stored = localStorage.getItem("ttt-name");
+              if (stored?.trim()) defaultName = stored.trim();
+            } catch {}
+            setJoinName(defaultName);
+            // Set default mode to free for QR joins
+            setJoinMode('free');
+            // Set room and navigate
+            setRoomCode(code);
+            router.replace(`/tictactoe?room=${code}`);
           }}
         />
       )}
