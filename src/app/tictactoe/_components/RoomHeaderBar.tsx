@@ -46,7 +46,7 @@ function RoomHeaderBarImpl({ roomCode, connected, peers, copied, onCopyLink, onI
               side="top"
               align="center"
               sideOffset={8}
-              className="z-[9999] rounded-xl animate-pulse bg-white text-black text-xs font-semibold px-3 py-2 shadow-2xl ring-2 ring-black/10 data-[state=delayed-open]:animate-in data-[state=closed]:animate-out data-[side=top]:slide-in-from-bottom-1"
+              className="z-[45] rounded-xl animate-pulse bg-white text-black text-xs font-semibold px-3 py-2 shadow-2xl ring-2 ring-black/10 data-[state=delayed-open]:animate-in data-[state=closed]:animate-out data-[side=top]:slide-in-from-bottom-1"
             >
               Click here to invite
               <span className="hidden sm:inline text-[10px] font-normal text-black/60 ml-1">(share link)</span>

@@ -231,7 +231,13 @@ function JoinModalImpl(props: JoinModalProps) {
               onAuthCta={() => signIn()}
             />
             <div className="flex gap-3 justify-end">
-              <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Cancel</button>
+              {/* <button
+                aria-disabled={disableJoin}
+                onClick={() => handleAttemptJoin(onJoinO)}
+                className={`rounded border border-white/20 bg-white/5 text-white px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/10'}`}
+              >
+                {joining ? 'Joining…' : 'Start as O'}
+              </button> */}
               <button
                 aria-disabled={disableJoin}
                 onClick={() => handleAttemptJoin(onJoinX)}
@@ -303,6 +309,62 @@ function JoinModalImpl(props: JoinModalProps) {
               </button>
             </div>
             
+          </>
+        ) : !hasX && hasO ? (
+          <>
+            <h2 className="text-xl font-bold mb-3">Join game</h2>
+            <PlayersHeader avatars={avatars} names={names} />
+
+            {sessionPresent ? (
+              <SignedInBanner
+                sessionUserImage={sessionUserImage}
+                sessionUserName={sessionUserName}
+                suffix={<span>Going to play with <span className="font-semibold">{on}</span></span>}
+              />
+            ) : null}
+
+            {!sessionPresent ? (
+              <> 
+                <AuthButtons socialCallbackUrl={socialCallbackUrl} variant="join" guestMode={guestMode} onToggleGuest={() => setGuestMode(v => !v)} />
+                {guestMode ? (
+                  <>
+                    <Divider label="or join without account" />
+                    <label className="text-white/70 text-sm">Your player name</label>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+            {(sessionPresent || guestMode) ? (
+              <NameInput
+                autoFocus
+                value={sessionPresent ? (sessionUserName ?? joinName) : joinName}
+                onChange={setJoinName}
+                placeholder="Player 2"
+                className="mb-4 mt-1"
+                disabled={!!sessionPresent}
+              />
+            ) : null}
+            
+            <ModeSelector
+              joinMode={joinMode}
+              setJoinMode={setJoinMode}
+              canSelectDaddy={canSelectDaddy}
+              isAuthed={sessionPresent}
+              daddyCoins={daddyCoins}
+              onBuyDaddyCoins={() => setBuyOpen(true)}
+              onAuthCta={() => signIn()}
+            />
+
+            <div className="flex gap-3 justify-between">
+              <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
+              <button
+                aria-disabled={disableJoin}
+                onClick={() => handleAttemptJoin(onJoinX)}
+                className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
+              >
+                {joining ? 'Joining…' : 'Join as X'}
+              </button>
+            </div>
           </>
         ) : (
           <>
