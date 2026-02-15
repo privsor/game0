@@ -4,6 +4,8 @@ import React, { memo } from "react";
 import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { ModeSelector } from "./_joinmodal/ModeSelector";
+import { ModeSelectionStep } from "./_joinmodal/ModeSelectionStep";
+import { AuthenticationStep } from "./_joinmodal/AuthenticationStep";
 import BuyDaddyCoinsModal from "./BuyDaddyCoinsModal";
 
 export type Role = "X" | "O";
@@ -168,6 +170,7 @@ function JoinModalImpl(props: JoinModalProps) {
   const xn = names?.X || 'Player 1';
   const on = names?.O || 'Player 2';
   const [guestMode, setGuestMode] = React.useState(false);
+  const [authStep, setAuthStep] = React.useState<'mode' | 'auth'>('mode');
   const modeSelected = joinMode !== null;
   const daddyBlocked = joinMode === 'daddy' && (!sessionPresent || daddyCoins <= 0);
   const disableJoin = joining || !modeSelected || daddyBlocked;
@@ -187,6 +190,26 @@ function JoinModalImpl(props: JoinModalProps) {
     roleHandler();
   };
 
+  const handleModeSelect = (mode: 'daddy' | 'free' | null) => {
+    setJoinMode(mode);
+    if (mode && !sessionPresent) {
+      setAuthStep('auth');
+    }
+  };
+
+  const handleJoinWithSocial = () => {
+    // This will trigger the authentication flow
+    // For now, we'll advance to auth step where users can choose their auth method
+    setAuthStep('auth');
+  };
+
+  // If user is already authenticated, show mode selection step
+  React.useEffect(() => {
+    if (sessionPresent && authStep === 'auth') {
+      setAuthStep('mode');
+    }
+  }, [sessionPresent, authStep]);
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center text-center z-50">
       <div className="relative w-full max-w-md rounded-xl backdrop-blur-sm border border-white/20 p-5 shadow-xl">
@@ -195,41 +218,31 @@ function JoinModalImpl(props: JoinModalProps) {
             <h2 className="text-xl font-bold mb-3">Create your player</h2>
             <PlayersHeader avatars={avatars} names={names} />
 
-            {sessionPresent ? (
-              <>
-                <SignedInBanner sessionUserImage={sessionUserImage} sessionUserName={sessionUserName} />
-              </>
-            ) : (
-              <>
-                {/* <p className="text-white/70 mb-4">Join quickly with an account, or continue without one.</p> */}
-                <AuthButtons socialCallbackUrl={socialCallbackUrl} variant="join" guestMode={guestMode} onToggleGuest={() => setGuestMode(v => !v)} />
-                {guestMode ? (
-                  <>
-                    <Divider label="or join without account" />
-                    <p className="text-white/70 mb-3">Enter your name. You will play as X.</p>
-                  </>
-                ) : null}
-              </>
-            )}
-            {(sessionPresent || guestMode) ? (
-              <NameInput
-                autoFocus
-                value={sessionPresent ? (sessionUserName ?? joinName) : joinName}
-                onChange={setJoinName}
-                placeholder="Player 1"
-                className="mb-4"
-                disabled={!!sessionPresent}
+            {/* Two-step flow: Mode Selection → Authentication */}
+            {authStep === 'mode' ? (
+              <ModeSelectionStep
+                joinMode={joinMode}
+                setJoinMode={handleModeSelect}
+                canSelectDaddy={canSelectDaddy}
+                isAuthed={sessionPresent}
+                daddyCoins={daddyCoins}
+                onBuyDaddyCoins={() => setBuyOpen(true)}
+                onJoinWithSocial={handleJoinWithSocial}
               />
-            ) : null}
-            <ModeSelector
-              joinMode={joinMode}
-              setJoinMode={setJoinMode}
-              canSelectDaddy={canSelectDaddy}
-              isAuthed={sessionPresent}
-              daddyCoins={daddyCoins}
-              onBuyDaddyCoins={() => setBuyOpen(true)}
-              onAuthCta={() => signIn()}
-            />
+            ) : (
+              <AuthenticationStep
+                socialCallbackUrl={socialCallbackUrl}
+                selectedMode={joinMode!}
+                sessionPresent={sessionPresent}
+                sessionUserName={sessionUserName}
+                sessionUserImage={sessionUserImage}
+                joinName={joinName}
+                setJoinName={setJoinName}
+                guestMode={guestMode}
+                setGuestMode={setGuestMode}
+                onBack={() => setAuthStep('mode')}
+              />
+            )}
             <div className="flex gap-3 justify-end">
               {/* <button
                 aria-disabled={disableJoin}
@@ -260,43 +273,31 @@ function JoinModalImpl(props: JoinModalProps) {
               />
             ) : null}
 
-
-            {!sessionPresent ? (
-              <> 
-                {/* <p className="text-white/70 mb-4">Join with an account or continue as guest. Going to play with <span className="font-semibold">{xn}</span></p> */}
-                <AuthButtons socialCallbackUrl={socialCallbackUrl} variant="join" guestMode={guestMode} onToggleGuest={() => setGuestMode(v => !v)} />
-                {guestMode ? (
-                  <>
-                    <Divider label="or join without account" />
-                    <label className="text-white/70 text-sm">Your player name</label>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                {/* <p className="text-white/70 mb-3">Enter your name. You will play as O.</p> */}
-              </>
-            )}
-            {(sessionPresent || guestMode) ? (
-              <NameInput
-                autoFocus
-                value={sessionPresent ? (sessionUserName ?? joinName) : joinName}
-                onChange={setJoinName}
-                placeholder="Player 2"
-                className="mb-4 mt-1"
-                disabled={!!sessionPresent}
+            {/* Two-step flow: Mode Selection → Authentication */}
+            {authStep === 'mode' ? (
+              <ModeSelectionStep
+                joinMode={joinMode}
+                setJoinMode={handleModeSelect}
+                canSelectDaddy={canSelectDaddy}
+                isAuthed={sessionPresent}
+                daddyCoins={daddyCoins}
+                onBuyDaddyCoins={() => setBuyOpen(true)}
+                onJoinWithSocial={handleJoinWithSocial}
               />
-            ) : null}
-            
-            <ModeSelector
-              joinMode={joinMode}
-              setJoinMode={setJoinMode}
-              canSelectDaddy={canSelectDaddy}
-              isAuthed={sessionPresent}
-              daddyCoins={daddyCoins}
-              onBuyDaddyCoins={() => setBuyOpen(true)}
-              onAuthCta={() => signIn()}
-            />
+            ) : (
+              <AuthenticationStep
+                socialCallbackUrl={socialCallbackUrl}
+                selectedMode={joinMode!}
+                sessionPresent={sessionPresent}
+                sessionUserName={sessionUserName}
+                sessionUserImage={sessionUserImage}
+                joinName={joinName}
+                setJoinName={setJoinName}
+                guestMode={guestMode}
+                setGuestMode={setGuestMode}
+                onBack={() => setAuthStep('mode')}
+              />
+            )}
 
             <div className="flex gap-3 justify-between">
               <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
@@ -323,37 +324,31 @@ function JoinModalImpl(props: JoinModalProps) {
               />
             ) : null}
 
-            {!sessionPresent ? (
-              <> 
-                <AuthButtons socialCallbackUrl={socialCallbackUrl} variant="join" guestMode={guestMode} onToggleGuest={() => setGuestMode(v => !v)} />
-                {guestMode ? (
-                  <>
-                    <Divider label="or join without account" />
-                    <label className="text-white/70 text-sm">Your player name</label>
-                  </>
-                ) : null}
-              </>
-            ) : null}
-            {(sessionPresent || guestMode) ? (
-              <NameInput
-                autoFocus
-                value={sessionPresent ? (sessionUserName ?? joinName) : joinName}
-                onChange={setJoinName}
-                placeholder="Player 2"
-                className="mb-4 mt-1"
-                disabled={!!sessionPresent}
+            {/* Two-step flow: Mode Selection → Authentication */}
+            {authStep === 'mode' ? (
+              <ModeSelectionStep
+                joinMode={joinMode}
+                setJoinMode={handleModeSelect}
+                canSelectDaddy={canSelectDaddy}
+                isAuthed={sessionPresent}
+                daddyCoins={daddyCoins}
+                onBuyDaddyCoins={() => setBuyOpen(true)}
+                onJoinWithSocial={handleJoinWithSocial}
               />
-            ) : null}
-            
-            <ModeSelector
-              joinMode={joinMode}
-              setJoinMode={setJoinMode}
-              canSelectDaddy={canSelectDaddy}
-              isAuthed={sessionPresent}
-              daddyCoins={daddyCoins}
-              onBuyDaddyCoins={() => setBuyOpen(true)}
-              onAuthCta={() => signIn()}
-            />
+            ) : (
+              <AuthenticationStep
+                socialCallbackUrl={socialCallbackUrl}
+                selectedMode={joinMode!}
+                sessionPresent={sessionPresent}
+                sessionUserName={sessionUserName}
+                sessionUserImage={sessionUserImage}
+                joinName={joinName}
+                setJoinName={setJoinName}
+                guestMode={guestMode}
+                setGuestMode={setGuestMode}
+                onBack={() => setAuthStep('mode')}
+              />
+            )}
 
             <div className="flex gap-3 justify-between">
               <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
