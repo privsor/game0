@@ -348,3 +348,27 @@ export const purchasesRelations = relations(purchases, ({ one }) => ({
 	gift: one(gifts, { fields: [purchases.giftId], references: [gifts.id] }),
 	variant: one(prizeVariants, { fields: [purchases.prizeVariantId], references: [prizeVariants.id] }),
 }));
+
+// ANALYTICS
+
+export const buttonClicks = createTable(
+	"button_click",
+	(d) => ({
+		id: d.integer().primaryKey().generatedByDefaultAsIdentity(),
+		event: d.varchar({ length: 128 }).notNull(),
+		source: d.varchar({ length: 64 }),
+		userId: d.varchar({ length: 255 }).references(() => users.id),
+		country: d.varchar({ length: 8 }),
+		region: d.varchar({ length: 128 }),
+		city: d.varchar({ length: 128 }),
+		timezone: d.varchar({ length: 64 }),
+		createdAt: d
+			.timestamp({ withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
+	}),
+	(t) => [
+		index("button_click_event_created_at_idx").on(t.event, t.createdAt),
+		index("button_click_created_at_idx").on(t.createdAt),
+	],
+);

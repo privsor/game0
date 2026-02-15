@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import PrizesModal from "../../../prizes/_components/PrizesModal";
+import { api } from "~/trpc/react";
 
 export type DaddyModeCardProps = {
   active: boolean;
@@ -58,11 +59,25 @@ function DealsRotator() {
 export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDaddy, daddyCoins, onBuyDaddyCoins, onJoinWithSocial }: DaddyModeCardProps) {
   const disabled = !isAuthed || !canSelectDaddy;
   const [prizesOpen, setPrizesOpen] = useState(false);
+
+  const trackButtonClick = api.analytics.trackButtonClick.useMutation();
   
   const handleSelectMode = () => {
     if (!disabled) {
       setActive();
     }
+  };
+
+  const handleViewMorePrizes = () => {
+    try {
+      trackButtonClick.mutate({
+        event: "daddymode_view_more_prizes_click",
+        source: "tictactoe_joinmodal",
+      });
+    } catch {
+      // best-effort
+    }
+    setPrizesOpen(true);
   };
   
   return (
@@ -120,7 +135,7 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
             <div className="mt-2 mb-2 flex justify-center px-2">
               <button
                 type="button"
-                onClick={() => setPrizesOpen(true)}
+                onClick={handleViewMorePrizes}
                 className="text-lg rounded border border-white/20 bg-white/5 px-3 py-1 text-white hover:bg-white/10"
               >
                 View more prizes
