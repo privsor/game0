@@ -107,10 +107,29 @@ export function PostGameClaimModal({
 
         {/* Top prizes (hook) */}
         <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="text-xs text-white/70 mb-1">Top prizes in Daddy's Prizes</div>
-          <div className="text-xs text-white flex flex-col items-center gap-2 flex-wrap">
-            <span className="font-medium text-white">Apple iPhone 17 Pro Max</span>
-            <DealsRotator />
+          <div className="text-md text-slate-300/90">Top Claims with Daddy Coins</div>
+          <div className="mt-1 border text-xs text-slate-200 rounded-md">
+            <div className="flex items-center justify-between px-2 py-1">
+              <Image src="/iphone17.gif" alt="iPhone 17" width={28} height={28} className="rounded-sm" />
+              <div className="">
+              <span className="font-medium text-white text-lg animate-pulse">Apple iPhone 17 Pro Max</span>
+              <div className="mt-1 flex justify-center">
+              <DealsRotator />
+            </div>
+              </div>
+              
+              <Image src="/iphone17.gif" alt="iPhone 17" width={28} height={28} className="rounded-sm" />
+            </div>
+            
+            <div className="mt-2 mb-2 flex justify-center px-2">
+              <button
+                type="button"
+                onClick={() => window.open('/prizes', '_blank')}
+                className="text-md rounded border border-white/20 bg-white/5 px-3 py-1 text-white hover:bg-white/10 animate-pulse"
+              >
+                Check winners and other prizes
+              </button>
+            </div>
           </div>
         </div>
 

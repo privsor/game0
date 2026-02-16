@@ -118,7 +118,7 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
 
         {/* Deals rotator */}
         <div className="mt-2">
-          <div className="text-md text-slate-300/90">Top Prizes in Daddy Mode</div>
+          <div className="text-md text-slate-300/90">Top claims with Daddy Coins</div>
           <div className="mt-1 border text-xs text-slate-200 rounded-md">
             <div className="flex items-center justify-between px-2 py-1">
               <Image src="/iphone17.gif" alt="iPhone 17" width={28} height={28} className="rounded-sm" />
