@@ -136,9 +136,9 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
               <button
                 type="button"
                 onClick={handleViewMorePrizes}
-                className="text-lg rounded border border-white/20 bg-white/5 px-3 py-1 text-white hover:bg-white/10"
+                className="text-md rounded border border-white/20 bg-white/5 px-3 py-1 text-white hover:bg-white/10 animate-pulse"
               >
-                View more prizes
+                Check winners and other prizes
               </button>
             </div>
           </div>
