@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { signIn, useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
+import PrizesModal from "../../prizes/_components/PrizesModal";
 
 export function PostGameClaimModal({
   open,
@@ -20,6 +21,7 @@ export function PostGameClaimModal({
 }) {
   const { data: session } = useSession();
   const [busy, setBusy] = useState(false);
+  const [prizesOpen, setPrizesOpen] = useState(false);
   const expired = useMemo(() => {
     if (!claim?.expiresAt) return false;
     return Date.now() > claim.expiresAt;
@@ -43,6 +45,10 @@ export function PostGameClaimModal({
       }
     })();
   }, [open, session?.user, room]);
+
+  const handleViewMorePrizes = () => {
+    setPrizesOpen(true);
+  };
 
   if (!open || !claim) return null;
 
@@ -124,7 +130,7 @@ export function PostGameClaimModal({
             <div className="mt-2 mb-2 flex justify-center px-2">
               <button
                 type="button"
-                onClick={() => window.open('/prizes', '_blank')}
+                onClick={handleViewMorePrizes}
                 className="text-md rounded border border-white/20 bg-white/5 px-3 py-1 text-white hover:bg-white/10 animate-pulse"
               >
                 Check winners and other prizes
@@ -137,6 +143,7 @@ export function PostGameClaimModal({
           <button onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-3 py-1.5 text-sm">Close</button>
         </div>
       </div>
+      <PrizesModal open={prizesOpen} onClose={() => setPrizesOpen(false)} />
     </div>
   );
 }
