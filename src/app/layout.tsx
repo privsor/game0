@@ -11,7 +11,7 @@ import Header from "./_components/Header";
 
 export const metadata: Metadata = {
   title: "Daddy Games",
-  description: "Old boring games our dads use to play",
+  description: "Old boring games our dads use to play. But DaddyCoins can be earned on beating other players",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
