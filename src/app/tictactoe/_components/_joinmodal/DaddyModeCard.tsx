@@ -103,11 +103,11 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
 
       {/* Earn Daddy Coins */}
       <div className="mt-3 flex items-center justify-center gap-2 rounded-md bg-slate-800/30 px-3 py-2 border border-slate-600/20">
-        <span className="text-sm text-slate-200 font-medium">Earn Daddy Coins</span>
+        <span className="text-sm text-slate-200 font-medium mr-2">Earn Daddy Coins</span>
         <div className="relative">
-          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} className="absolute -top-1 -left-1 opacity-60" />
-          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} className="absolute -top-0.5 -left-0.5 opacity-80" />
-          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} />
+          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} className="absolute -left-2" style={{ filter: 'drop-shadow(0 2px 2px rgb(0 0 0 / 0.4))' }} />
+          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} className="absolute -left-1" style={{ filter: 'drop-shadow(0 4px 3px rgb(0 0 0 / 0.5))' }} />
+          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} style={{ filter: 'drop-shadow(0 10px 8px rgb(0 0 0 / 0.6))' }} />
         </div>
         
       </div>
