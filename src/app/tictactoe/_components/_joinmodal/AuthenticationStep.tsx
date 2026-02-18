@@ -15,6 +15,7 @@ export type AuthenticationStepProps = {
   guestMode: boolean;
   setGuestMode: (v: boolean) => void;
   onBack?: () => void;
+  onContinue?: () => void;
 };
 
 const Divider: React.FC<{ label: string }> = ({ label }) => (
@@ -68,29 +69,22 @@ export function AuthenticationStep({
   setJoinName,
   guestMode,
   setGuestMode,
-  onBack
+  onBack,
+  onContinue
 }: AuthenticationStepProps) {
   const getModeContext = () => {
     if (selectedMode === 'daddy') {
-      return "Join with a social account to activate Daddy Mode";
+      return "Sign in to activate Daddy Mode and use your DaddyCoins";
     }
-    return "Join quickly with an account, or continue without one";
+    return "Sign in to save your progress and play with friends";
   };
 
   return (
     <div className="">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3">
         <h2 className="text-xl font-bold tracking-wide text-slate-100">
           {selectedMode === 'daddy' ? 'Activate Daddy Mode' : 'Join to play'}
         </h2>
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="text-slate-400 hover:text-slate-200 text-sm"
-          >
-            ← Back
-          </button>
-        )}
       </div>
       
       {sessionPresent ? (
@@ -146,14 +140,24 @@ export function AuthenticationStep({
       )}
       
       {(sessionPresent || guestMode) ? (
-        <NameInput
-          autoFocus
-          value={sessionPresent ? (sessionUserName ?? joinName) : joinName}
-          onChange={setJoinName}
-          placeholder="Player 1"
-          className="mb-4"
-          disabled={!!sessionPresent}
-        />
+        <>
+          <NameInput
+            autoFocus
+            value={sessionPresent ? (sessionUserName ?? joinName) : joinName}
+            onChange={setJoinName}
+            placeholder="Player 1"
+            className="mb-4"
+            disabled={!!sessionPresent}
+          />
+          {onContinue ? (
+            <button
+              onClick={onContinue}
+              className="w-full rounded bg-white text-black px-4 py-2 font-semibold hover:bg-white/90"
+            >
+              Continue to mode selection
+            </button>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

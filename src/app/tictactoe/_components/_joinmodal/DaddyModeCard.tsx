@@ -101,6 +101,17 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
         </div>
       </div>
 
+      {/* Earn Daddy Coins */}
+      <div className="mt-3 flex items-center justify-center gap-2 rounded-md bg-slate-800/30 px-3 py-2 border border-slate-600/20">
+        <span className="text-sm text-slate-200 font-medium">Earn Daddy Coins</span>
+        <div className="relative">
+          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} className="absolute -top-1 -left-1 opacity-60" />
+          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} className="absolute -top-0.5 -left-0.5 opacity-80" />
+          <Image src="/icons/daddycoin.svg" alt="DaddyCoin Stack" width={16} height={16} />
+        </div>
+        
+      </div>
+
       {/* Content */}
       <div className="mt-3 space-y-3 text-center">
         {/* Rewards compact */}
@@ -118,12 +129,12 @@ export default function DaddyModeCard({ active, setActive, isAuthed, canSelectDa
 
         {/* Deals rotator */}
         <div className="mt-2">
-          <div className="text-md text-slate-300/90">Top claims with Daddy Coins</div>
+          <div className="text-md text-slate-300/90">What to buy with Daddy Coins</div>
           <div className="mt-1 border text-xs text-slate-200 rounded-md">
             <div className="flex items-center justify-between px-2 py-1">
               <Image src="/iphone17.gif" alt="iPhone 17" width={28} height={28} className="rounded-sm" />
               <div className="">
-              <span className="font-medium text-white text-lg animate-pulse">Apple iPhone 17 Pro Max</span>
+              <span className="font-medium text-white text-lg drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]">Apple iPhone 17 Pro Max</span>
               <div className="mt-1 flex justify-center">
               <DealsRotator />
             </div>

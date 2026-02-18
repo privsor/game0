@@ -170,7 +170,7 @@ function JoinModalImpl(props: JoinModalProps) {
   const xn = names?.X || 'Player 1';
   const on = names?.O || 'Player 2';
   const [guestMode, setGuestMode] = React.useState(false);
-  const [authStep, setAuthStep] = React.useState<'mode' | 'auth'>('mode');
+  const [authStep, setAuthStep] = React.useState<'mode' | 'auth'>('auth');
   const modeSelected = joinMode !== null;
   const daddyBlocked = joinMode === 'daddy' && (!sessionPresent || daddyCoins <= 0);
   const disableJoin = joining || !modeSelected || daddyBlocked;
@@ -192,18 +192,17 @@ function JoinModalImpl(props: JoinModalProps) {
 
   const handleModeSelect = (mode: 'daddy' | 'free' | null) => {
     setJoinMode(mode);
-    if (mode && !sessionPresent) {
-      setAuthStep('auth');
-    }
   };
 
-  const handleJoinWithSocial = () => {
-    // This will trigger the authentication flow
-    // For now, we'll advance to auth step where users can choose their auth method
+  const handleBackToAuth = () => {
     setAuthStep('auth');
   };
 
-  // If user is already authenticated, show mode selection step
+  const handleContinueToMode = () => {
+    setAuthStep('mode');
+  };
+
+  // If user is already authenticated, skip auth step
   React.useEffect(() => {
     if (sessionPresent && authStep === 'auth') {
       setAuthStep('mode');
@@ -218,21 +217,11 @@ function JoinModalImpl(props: JoinModalProps) {
             <h2 className="text-xl font-bold mb-3">Create your player</h2>
             <PlayersHeader avatars={avatars} names={names} />
 
-            {/* Two-step flow: Mode Selection → Authentication */}
-            {authStep === 'mode' ? (
-              <ModeSelectionStep
-                joinMode={joinMode}
-                setJoinMode={handleModeSelect}
-                canSelectDaddy={canSelectDaddy}
-                isAuthed={sessionPresent}
-                daddyCoins={daddyCoins}
-                onBuyDaddyCoins={() => setBuyOpen(true)}
-                onJoinWithSocial={handleJoinWithSocial}
-              />
-            ) : (
+            {/* Two-step flow: Authentication → Mode Selection */}
+            {authStep === 'auth' ? (
               <AuthenticationStep
                 socialCallbackUrl={socialCallbackUrl}
-                selectedMode={joinMode!}
+                selectedMode={joinMode || 'free'}
                 sessionPresent={sessionPresent}
                 sessionUserName={sessionUserName}
                 sessionUserImage={sessionUserImage}
@@ -240,25 +229,38 @@ function JoinModalImpl(props: JoinModalProps) {
                 setJoinName={setJoinName}
                 guestMode={guestMode}
                 setGuestMode={setGuestMode}
-                onBack={() => setAuthStep('mode')}
+                onBack={undefined}
+                onContinue={handleContinueToMode}
+              />
+            ) : (
+              <ModeSelectionStep
+                joinMode={joinMode}
+                setJoinMode={handleModeSelect}
+                canSelectDaddy={canSelectDaddy}
+                isAuthed={sessionPresent}
+                daddyCoins={daddyCoins}
+                onBuyDaddyCoins={() => setBuyOpen(true)}
+                onJoinWithSocial={handleBackToAuth}
               />
             )}
-            <div className="flex gap-3 justify-end">
-              {/* <button
-                aria-disabled={disableJoin}
-                onClick={() => handleAttemptJoin(onJoinO)}
-                className={`rounded border border-white/20 bg-white/5 text-white px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/10'}`}
-              >
-                {joining ? 'Joining…' : 'Start as O'}
-              </button> */}
-              <button
-                aria-disabled={disableJoin}
-                onClick={() => handleAttemptJoin(onJoinX)}
-                className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
-              >
-                {joining ? 'Joining…' : 'Start as X'}
-              </button>
-            </div>
+            {authStep === 'mode' && (
+              <div className="flex gap-3 justify-end">
+                {/* <button
+                  aria-disabled={disableJoin}
+                  onClick={() => handleAttemptJoin(onJoinO)}
+                  className={`rounded border border-white/20 bg-white/5 text-white px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/10'}`}
+                >
+                  {joining ? 'Joining…' : 'Start as O'}
+                </button> */}
+                <button
+                  aria-disabled={disableJoin}
+                  onClick={() => handleAttemptJoin(onJoinX)}
+                  className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
+                >
+                  {joining ? 'Joining…' : 'Start as X'}
+                </button>
+              </div>
+            )}
           </>
         ) : hasX && !hasO ? (
           <>
@@ -273,21 +275,11 @@ function JoinModalImpl(props: JoinModalProps) {
               />
             ) : null}
 
-            {/* Two-step flow: Mode Selection → Authentication */}
-            {authStep === 'mode' ? (
-              <ModeSelectionStep
-                joinMode={joinMode}
-                setJoinMode={handleModeSelect}
-                canSelectDaddy={canSelectDaddy}
-                isAuthed={sessionPresent}
-                daddyCoins={daddyCoins}
-                onBuyDaddyCoins={() => setBuyOpen(true)}
-                onJoinWithSocial={handleJoinWithSocial}
-              />
-            ) : (
+            {/* Two-step flow: Authentication → Mode Selection */}
+            {authStep === 'auth' ? (
               <AuthenticationStep
                 socialCallbackUrl={socialCallbackUrl}
-                selectedMode={joinMode!}
+                selectedMode={joinMode || 'free'}
                 sessionPresent={sessionPresent}
                 sessionUserName={sessionUserName}
                 sessionUserImage={sessionUserImage}
@@ -295,20 +287,33 @@ function JoinModalImpl(props: JoinModalProps) {
                 setJoinName={setJoinName}
                 guestMode={guestMode}
                 setGuestMode={setGuestMode}
-                onBack={() => setAuthStep('mode')}
+                onBack={undefined}
+                onContinue={handleContinueToMode}
+              />
+            ) : (
+              <ModeSelectionStep
+                joinMode={joinMode}
+                setJoinMode={handleModeSelect}
+                canSelectDaddy={canSelectDaddy}
+                isAuthed={sessionPresent}
+                daddyCoins={daddyCoins}
+                onBuyDaddyCoins={() => setBuyOpen(true)}
+                onJoinWithSocial={handleBackToAuth}
               />
             )}
 
-            <div className="flex gap-3 justify-between">
-              <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
-              <button
-                aria-disabled={disableJoin}
-                onClick={() => handleAttemptJoin(onJoinO)}
-                className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
-              >
-                {joining ? 'Joining…' : 'Join as O'}
-              </button>
-            </div>
+            {authStep === 'mode' && (
+              <div className="flex gap-3 justify-between">
+                <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
+                <button
+                  aria-disabled={disableJoin}
+                  onClick={() => handleAttemptJoin(onJoinO)}
+                  className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
+                >
+                  {joining ? 'Joining…' : 'Join as O'}
+                </button>
+              </div>
+            )}
             
           </>
         ) : !hasX && hasO ? (
@@ -324,21 +329,11 @@ function JoinModalImpl(props: JoinModalProps) {
               />
             ) : null}
 
-            {/* Two-step flow: Mode Selection → Authentication */}
-            {authStep === 'mode' ? (
-              <ModeSelectionStep
-                joinMode={joinMode}
-                setJoinMode={handleModeSelect}
-                canSelectDaddy={canSelectDaddy}
-                isAuthed={sessionPresent}
-                daddyCoins={daddyCoins}
-                onBuyDaddyCoins={() => setBuyOpen(true)}
-                onJoinWithSocial={handleJoinWithSocial}
-              />
-            ) : (
+            {/* Two-step flow: Authentication → Mode Selection */}
+            {authStep === 'auth' ? (
               <AuthenticationStep
                 socialCallbackUrl={socialCallbackUrl}
-                selectedMode={joinMode!}
+                selectedMode={joinMode || 'free'}
                 sessionPresent={sessionPresent}
                 sessionUserName={sessionUserName}
                 sessionUserImage={sessionUserImage}
@@ -346,20 +341,33 @@ function JoinModalImpl(props: JoinModalProps) {
                 setJoinName={setJoinName}
                 guestMode={guestMode}
                 setGuestMode={setGuestMode}
-                onBack={() => setAuthStep('mode')}
+                onBack={undefined}
+                onContinue={handleContinueToMode}
+              />
+            ) : (
+              <ModeSelectionStep
+                joinMode={joinMode}
+                setJoinMode={handleModeSelect}
+                canSelectDaddy={canSelectDaddy}
+                isAuthed={sessionPresent}
+                daddyCoins={daddyCoins}
+                onBuyDaddyCoins={() => setBuyOpen(true)}
+                onJoinWithSocial={handleBackToAuth}
               />
             )}
 
-            <div className="flex gap-3 justify-between">
-              <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
-              <button
-                aria-disabled={disableJoin}
-                onClick={() => handleAttemptJoin(onJoinX)}
-                className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
-              >
-                {joining ? 'Joining…' : 'Join as X'}
-              </button>
-            </div>
+            {authStep === 'mode' && (
+              <div className="flex gap-3 justify-between">
+                <button disabled={joining} onClick={onClose} className="rounded border border-white/20 bg-white/5 hover:bg-white/10 px-4 py-2">Watch instead</button>
+                <button
+                  aria-disabled={disableJoin}
+                  onClick={() => handleAttemptJoin(onJoinX)}
+                  className={`rounded bg-white text-black px-4 py-2 font-semibold ${disableJoin ? 'opacity-60 cursor-not-allowed' : 'hover:bg-white/90'}`}
+                >
+                  {joining ? 'Joining…' : 'Join as X'}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <>
